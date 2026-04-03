@@ -17,10 +17,21 @@ type Trade = {
   notes: string;
   mistakes: string[];
   pnl: number;
+  screenshot_url?: string | null;
   created_at?: string;
 };
 
 type ThemeMode = "light" | "dark";
+
+type SortField =
+  | "date"
+  | "ticker"
+  | "side"
+  | "entry"
+  | "exit"
+  | "shares"
+  | "setup"
+  | "pnl";
 
 type Props = {
   userId: string;
@@ -37,6 +48,17 @@ const mistakeOptions = [
   "Early Exit",
   "Revenge Trade",
   "No Plan",
+];
+
+const setupOptions = [
+  "Breakout",
+  "Pullback",
+  "Opening Range Breakout",
+  "Reversal",
+  "Trend Continuation",
+  "Support/Resistance Bounce",
+  "VWAP Reclaim",
+  "Other",
 ];
 
 function calculatePnL(
@@ -67,7 +89,11 @@ export default function TradeJournalClient({
   const [shares, setShares] = useState("");
   const [setup, setSetup] = useState("");
   const [notes, setNotes] = useState("");
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [existingScreenshotUrl, setExistingScreenshotUrl] = useState("");
   const [mistakes, setMistakes] = useState<string[]>([]);
+  const [selectedSetup, setSelectedSetup] = useState("");
+  const [customSetup, setCustomSetup] = useState("");
 
   const [editingTradeId, setEditingTradeId] = useState<number | null>(null);
   const [trades, setTrades] = useState<Trade[]>(initialTrades);
@@ -76,13 +102,19 @@ export default function TradeJournalClient({
   const [setupFilter, setSetupFilter] = useState("");
   const [mistakeFilter, setMistakeFilter] = useState("All");
 
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+
   const [statusMessage, setStatusMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
+    const savedTheme = localStorage.getItem(
+      THEME_STORAGE_KEY
+    ) as ThemeMode | null;
+
     if (savedTheme === "light" || savedTheme === "dark") {
       setTheme(savedTheme);
     }
@@ -93,7 +125,7 @@ export default function TradeJournalClient({
     localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme, mounted]);
 
-  const resetForm = () => {
+    const resetForm = () => {
     setDate("");
     setTicker("");
     setSide("Long");
@@ -101,9 +133,28 @@ export default function TradeJournalClient({
     setExit("");
     setShares("");
     setSetup("");
+    setSelectedSetup("");
+    setCustomSetup("");
     setNotes("");
     setMistakes([]);
+    setScreenshotFile(null);
+    setExistingScreenshotUrl("");
     setEditingTradeId(null);
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortField(field);
+    setSortDirection(field === "date" ? "desc" : "asc");
+  };
+
+  const getSortIndicator = (field: SortField) => {
+    if (sortField !== field) return "↕";
+    return sortDirection === "asc" ? "↑" : "↓";
   };
 
   const livePnL = useMemo(() => {
@@ -134,55 +185,69 @@ export default function TradeJournalClient({
   }, [trades, totalPnL]);
 
   const averageWin = useMemo(() => {
-  const wins = trades.filter((trade) => Number(trade.pnl) > 0);
-  if (!wins.length) return 0;
-  return wins.reduce((sum, trade) => sum + Number(trade.pnl), 0) / wins.length;
-}, [trades]);
+    const wins = trades.filter((trade) => Number(trade.pnl) > 0);
+    if (!wins.length) return 0;
+    return (
+      wins.reduce((sum, trade) => sum + Number(trade.pnl), 0) / wins.length
+    );
+  }, [trades]);
 
-const averageLoss = useMemo(() => {
-  const losses = trades.filter((trade) => Number(trade.pnl) < 0);
-  if (!losses.length) return 0;
-  return losses.reduce((sum, trade) => sum + Number(trade.pnl), 0) / losses.length;
-}, [trades]);
+  const averageLoss = useMemo(() => {
+    const losses = trades.filter((trade) => Number(trade.pnl) < 0);
+    if (!losses.length) return 0;
+    return (
+      losses.reduce((sum, trade) => sum + Number(trade.pnl), 0) / losses.length
+    );
+  }, [trades]);
 
-const largestWin = useMemo(() => {
-  const wins = trades.filter((trade) => Number(trade.pnl) > 0);
-  if (!wins.length) return 0;
-  return Math.max(...wins.map((trade) => Number(trade.pnl)));
-}, [trades]);
+  const largestWin = useMemo(() => {
+    const wins = trades.filter((trade) => Number(trade.pnl) > 0);
+    if (!wins.length) return 0;
+    return Math.max(...wins.map((trade) => Number(trade.pnl)));
+  }, [trades]);
 
-const largestLoss = useMemo(() => {
-  const losses = trades.filter((trade) => Number(trade.pnl) < 0);
-  if (!losses.length) return 0;
-  return Math.min(...losses.map((trade) => Number(trade.pnl)));
-}, [trades]);
+  const largestLoss = useMemo(() => {
+    const losses = trades.filter((trade) => Number(trade.pnl) < 0);
+    if (!losses.length) return 0;
+    return Math.min(...losses.map((trade) => Number(trade.pnl)));
+  }, [trades]);
 
-const expectancy = useMemo(() => {
-  if (!trades.length) return 0;
+  const expectancy = useMemo(() => {
+    if (!trades.length) return 0;
 
-  const wins = trades.filter((trade) => Number(trade.pnl) > 0);
-  const losses = trades.filter((trade) => Number(trade.pnl) < 0);
+    const wins = trades.filter((trade) => Number(trade.pnl) > 0);
+    const losses = trades.filter((trade) => Number(trade.pnl) < 0);
 
-  const winRateDecimal = wins.length / trades.length;
-  const lossRateDecimal = losses.length / trades.length;
+    const winRateDecimal = wins.length / trades.length;
+    const lossRateDecimal = losses.length / trades.length;
 
-  const avgWin =
-    wins.length > 0
-      ? wins.reduce((sum, trade) => sum + Number(trade.pnl), 0) / wins.length
-      : 0;
+    const avgWin =
+      wins.length > 0
+        ? wins.reduce((sum, trade) => sum + Number(trade.pnl), 0) / wins.length
+        : 0;
 
-  const avgLossAbs =
-    losses.length > 0
-      ? Math.abs(
-          losses.reduce((sum, trade) => sum + Number(trade.pnl), 0) / losses.length
-        )
-      : 0;
+    const avgLossAbs =
+      losses.length > 0
+        ? Math.abs(
+            losses.reduce((sum, trade) => sum + Number(trade.pnl), 0) /
+              losses.length
+          )
+        : 0;
 
-  return winRateDecimal * avgWin - lossRateDecimal * avgLossAbs;
-}, [trades]);
+    return winRateDecimal * avgWin - lossRateDecimal * avgLossAbs;
+  }, [trades]);
 
+  const profitFactor = useMemo(() => {
+    const wins = trades.filter((t) => Number(t.pnl) > 0);
+    const losses = trades.filter((t) => Number(t.pnl) < 0);
 
+    const grossProfit = wins.reduce((sum, t) => sum + Number(t.pnl), 0);
+    const grossLoss = losses.reduce((sum, t) => sum + Number(t.pnl), 0);
 
+    if (grossLoss === 0) return grossProfit > 0 ? Infinity : 0;
+
+    return grossProfit / Math.abs(grossLoss);
+  }, [trades]);
 
   const filteredTrades = useMemo(() => {
     return trades.filter((trade) => {
@@ -200,6 +265,59 @@ const expectancy = useMemo(() => {
       return tickerMatches && setupMatches && mistakeMatches;
     });
   }, [trades, tickerFilter, setupFilter, mistakeFilter]);
+
+  const sortedTrades = useMemo(() => {
+    const sorted = [...filteredTrades];
+
+    sorted.sort((a, b) => {
+      let aValue: string | number = "";
+      let bValue: string | number = "";
+
+      switch (sortField) {
+        case "date":
+          aValue = a.date;
+          bValue = b.date;
+          break;
+        case "ticker":
+          aValue = a.ticker;
+          bValue = b.ticker;
+          break;
+        case "side":
+          aValue = a.side;
+          bValue = b.side;
+          break;
+        case "entry":
+          aValue = Number(a.entry);
+          bValue = Number(b.entry);
+          break;
+        case "exit":
+          aValue = Number(a.exit);
+          bValue = Number(b.exit);
+          break;
+        case "shares":
+          aValue = Number(a.shares);
+          bValue = Number(b.shares);
+          break;
+        case "setup":
+          aValue = a.setup || "";
+          bValue = b.setup || "";
+          break;
+        case "pnl":
+          aValue = Number(a.pnl);
+          bValue = Number(b.pnl);
+          break;
+      }
+
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return sortDirection === "asc" ? aValue - bValue : bValue - aValue;
+      }
+
+      const comparison = String(aValue).localeCompare(String(bValue));
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return sorted;
+  }, [filteredTrades, sortField, sortDirection]);
 
   const filteredTotalPnL = useMemo(
     () => filteredTrades.reduce((sum, trade) => sum + Number(trade.pnl), 0),
@@ -221,16 +339,16 @@ const expectancy = useMemo(() => {
   }, [filteredTrades]);
 
   const maxDrawdown = useMemo(() => {
-  if (!cumulativePnL.length) return 0;
+    if (!cumulativePnL.length) return 0;
 
-  let peak = cumulativePnL[0].value;
-  let maxDd = 0;
+    let peak = cumulativePnL[0].value;
+    let maxDd = 0;
 
-  for (const point of cumulativePnL) {
-    if (point.value > peak) peak = point.value;
-    const drawdown = peak - point.value;
-    if (drawdown > maxDd) maxDd = drawdown;
-  }
+    for (const point of cumulativePnL) {
+      if (point.value > peak) peak = point.value;
+      const drawdown = peak - point.value;
+      if (drawdown > maxDd) maxDd = drawdown;
+    }
 
     return maxDd;
   }, [cumulativePnL]);
@@ -263,6 +381,95 @@ const expectancy = useMemo(() => {
     return { points, min, max };
   }, [cumulativePnL]);
 
+  const setupAnalytics = useMemo(() => {
+    const grouped: Record<string, Trade[]> = {};
+
+    for (const trade of trades) {
+      const key = trade.setup?.trim() || "No Setup";
+
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+
+      grouped[key].push(trade);
+    }
+
+    return Object.entries(grouped)
+      .map(([setupName, setupTrades]) => {
+        const totalTrades = setupTrades.length;
+
+        const wins = setupTrades.filter((t) => Number(t.pnl) > 0);
+        const losses = setupTrades.filter((t) => Number(t.pnl) < 0);
+
+        const totalPnL = setupTrades.reduce(
+          (sum, t) => sum + Number(t.pnl),
+          0
+        );
+
+        const winRate = totalTrades > 0 ? (wins.length / totalTrades) * 100 : 0;
+
+        const averagePnL = totalTrades > 0 ? totalPnL / totalTrades : 0;
+
+        const averageWin =
+          wins.length > 0
+            ? wins.reduce((sum, t) => sum + Number(t.pnl), 0) / wins.length
+            : 0;
+
+        const averageLoss =
+          losses.length > 0
+            ? losses.reduce((sum, t) => sum + Number(t.pnl), 0) / losses.length
+            : 0;
+
+        return {
+          setupName,
+          totalTrades,
+          winRate,
+          totalPnL,
+          averagePnL,
+          averageWin,
+          averageLoss,
+        };
+      })
+      .sort((a, b) => b.totalPnL - a.totalPnL);
+  }, [trades]);
+
+    const mistakeAnalytics = useMemo(() => {
+    const grouped: Record<string, Trade[]> = {};
+
+    for (const trade of trades) {
+      if (!trade.mistakes || trade.mistakes.length === 0) continue;
+
+      for (const mistake of trade.mistakes) {
+        if (!grouped[mistake]) {
+          grouped[mistake] = [];
+        }
+
+        grouped[mistake].push(trade);
+      }
+    }
+
+    return Object.entries(grouped)
+      .map(([mistakeName, mistakeTrades]) => {
+        const totalTrades = mistakeTrades.length;
+        const wins = mistakeTrades.filter((t) => Number(t.pnl) > 0);
+        const totalPnL = mistakeTrades.reduce(
+          (sum, t) => sum + Number(t.pnl),
+          0
+        );
+        const averagePnL = totalTrades > 0 ? totalPnL / totalTrades : 0;
+        const winRate = totalTrades > 0 ? (wins.length / totalTrades) * 100 : 0;
+
+        return {
+          mistakeName,
+          totalTrades,
+          totalPnL,
+          averagePnL,
+          winRate,
+        };
+      })
+      .sort((a, b) => a.totalPnL - b.totalPnL);
+  }, [trades]);
+
   const toggleMistake = (mistake: string) => {
     setMistakes((prev) =>
       prev.includes(mistake)
@@ -271,7 +478,10 @@ const expectancy = useMemo(() => {
     );
   };
 
-  const editTrade = (trade: Trade) => {
+      const editTrade = (trade: Trade) => {
+    const tradeSetup = trade.setup || "";
+    const isPresetSetup = setupOptions.includes(tradeSetup);
+
     setEditingTradeId(trade.id);
     setDate(trade.date);
     setTicker(trade.ticker);
@@ -279,16 +489,24 @@ const expectancy = useMemo(() => {
     setEntry(String(trade.entry));
     setExit(String(trade.exit));
     setShares(String(trade.shares));
-    setSetup(trade.setup || "");
+    setSetup(tradeSetup);
+    setSelectedSetup(isPresetSetup ? tradeSetup : tradeSetup ? "Other" : "");
+    setCustomSetup(isPresetSetup ? "" : tradeSetup);
     setNotes(trade.notes || "");
     setMistakes(trade.mistakes || []);
+    setScreenshotFile(null);
+    setExistingScreenshotUrl(trade.screenshot_url || "");
     setStatusMessage("");
   };
 
-  const submitTrade = async () => {
+    const submitTrade = async () => {
     const entryNum = Number(entry);
     const exitNum = Number(exit);
     const sharesNum = Number(shares);
+    const finalSetup =
+      selectedSetup === "Other"
+        ? customSetup.trim()
+        : selectedSetup.trim();
 
     if (!date || !ticker || !entry || !exit || !shares) {
       setStatusMessage("Fill in date, ticker, entry, exit, and shares.");
@@ -300,23 +518,54 @@ const expectancy = useMemo(() => {
       return;
     }
 
-    const tradePayload = {
-      user_id: userId,
-      date,
-      ticker: ticker.toUpperCase(),
-      side,
-      entry: entryNum,
-      exit: exitNum,
-      shares: sharesNum,
-      setup,
-      notes,
-      mistakes,
-      pnl: calculatePnL(entryNum, exitNum, sharesNum, side),
-    };
+    if (selectedSetup === "Other" && !customSetup.trim()) {
+      setStatusMessage("Enter a custom setup name.");
+      return;
+    }
 
     try {
       setSaving(true);
       setStatusMessage("");
+
+      let screenshotUrl = existingScreenshotUrl;
+
+      if (screenshotFile) {
+        const fileExt = screenshotFile.name.split(".").pop() || "png";
+        const safeTicker = ticker.trim().toUpperCase() || "TRADE";
+        const fileName = `${userId}/${Date.now()}-${safeTicker}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("trade-screenshot")
+          .upload(fileName, screenshotFile, {
+            upsert: false,
+          });
+
+        if (uploadError) {
+          setStatusMessage(uploadError.message);
+          return;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("trade-screenshot")
+          .getPublicUrl(fileName);
+
+        screenshotUrl = publicUrlData.publicUrl;
+      }
+
+      const tradePayload = {
+        user_id: userId,
+        date,
+        ticker: ticker.toUpperCase(),
+        side,
+        entry: entryNum,
+        exit: exitNum,
+        shares: sharesNum,
+        setup: finalSetup,
+        notes,
+        mistakes,
+        pnl: calculatePnL(entryNum, exitNum, sharesNum, side),
+        screenshot_url: screenshotUrl || null,
+      };
 
       if (editingTradeId !== null) {
         const { data, error } = await supabase
@@ -380,7 +629,10 @@ const expectancy = useMemo(() => {
       return;
     }
 
-    const { error } = await supabase.from("trades").delete().eq("user_id", userId);
+    const { error } = await supabase
+      .from("trades")
+      .delete()
+      .eq("user_id", userId);
 
     if (error) {
       setStatusMessage(error.message);
@@ -407,6 +659,62 @@ const expectancy = useMemo(() => {
     } finally {
       setSigningOut(false);
     }
+  };
+
+  const exportToCSV = () => {
+    if (!sortedTrades.length) {
+      setStatusMessage("No trades to export.");
+      return;
+    }
+
+    const headers = [
+      "Date",
+      "Ticker",
+      "Side",
+      "Entry",
+      "Exit",
+      "Shares",
+      "Setup",
+      "Mistakes",
+      "Notes",
+      "PnL",
+    ];
+
+    const rows = sortedTrades.map((trade) => [
+      trade.date,
+      trade.ticker,
+      trade.side,
+      trade.entry,
+      trade.exit,
+      trade.shares,
+      trade.setup || "",
+      trade.mistakes.join(" | "),
+      trade.notes || "",
+      trade.pnl,
+    ]);
+
+    const escapeCSVValue = (value: string | number) => {
+      const stringValue = String(value ?? "");
+      return `"${stringValue.replace(/"/g, '""')}"`;
+    };
+
+    const csvContent = [
+      headers.map(escapeCSVValue).join(","),
+      ...rows.map((row) => row.map(escapeCSVValue).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "trades-export.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+    setStatusMessage("CSV exported.");
   };
 
   const styles = {
@@ -486,14 +794,18 @@ const expectancy = useMemo(() => {
           <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
             <button
               onClick={() => setTheme("light")}
-              className={`${theme === "light" ? styles.buttonPrimary : styles.buttonSecondary} min-w-[96px]`}
+              className={`${
+                theme === "light" ? styles.buttonPrimary : styles.buttonSecondary
+              } min-w-[96px]`}
             >
               Light
             </button>
 
             <button
               onClick={() => setTheme("dark")}
-              className={`${theme === "dark" ? styles.buttonPrimary : styles.buttonSecondary} min-w-[96px]`}
+              className={`${
+                theme === "dark" ? styles.buttonPrimary : styles.buttonSecondary
+              } min-w-[96px]`}
             >
               Dark
             </button>
@@ -539,7 +851,9 @@ const expectancy = useMemo(() => {
 
               <div className="space-y-4">
                 <div>
-                  <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                  <label
+                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                  >
                     Date
                   </label>
                   <input
@@ -551,7 +865,9 @@ const expectancy = useMemo(() => {
                 </div>
 
                 <div>
-                  <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                  <label
+                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                  >
                     Ticker
                   </label>
                   <input
@@ -563,19 +879,29 @@ const expectancy = useMemo(() => {
                 </div>
 
                 <div>
-                  <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                  <label
+                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                  >
                     Position
                   </label>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => setSide("Long")}
-                      className={side === "Long" ? styles.buttonPrimary : styles.buttonSecondary}
+                      className={
+                        side === "Long"
+                          ? styles.buttonPrimary
+                          : styles.buttonSecondary
+                      }
                     >
                       Long
                     </button>
                     <button
                       onClick={() => setSide("Short")}
-                      className={side === "Short" ? styles.buttonPrimary : styles.buttonSecondary}
+                      className={
+                        side === "Short"
+                          ? styles.buttonPrimary
+                          : styles.buttonSecondary
+                      }
                     >
                       Short
                     </button>
@@ -584,7 +910,9 @@ const expectancy = useMemo(() => {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                    <label
+                      className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                    >
                       Entry Price
                     </label>
                     <input
@@ -596,7 +924,9 @@ const expectancy = useMemo(() => {
                     />
                   </div>
                   <div>
-                    <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                    <label
+                      className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                    >
                       Exit Price
                     </label>
                     <input
@@ -610,7 +940,9 @@ const expectancy = useMemo(() => {
                 </div>
 
                 <div>
-                  <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                  <label
+                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                  >
                     Shares
                   </label>
                   <input
@@ -623,19 +955,40 @@ const expectancy = useMemo(() => {
                 </div>
 
                 <div>
-                  <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                  <label
+                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                  >
                     Setup
                   </label>
-                  <input
-                    placeholder="Breakout, pullback, opening range..."
-                    value={setup}
-                    onChange={(e) => setSetup(e.target.value)}
+
+                  <select
+                    value={selectedSetup}
+                    onChange={(e) => setSelectedSetup(e.target.value)}
                     className={styles.input}
-                  />
+                  >
+                    <option value="">Select setup</option>
+                    {setupOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+
+                  {selectedSetup === "Other" && (
+                    <input
+                      type="text"
+                      placeholder="Enter custom setup"
+                      value={customSetup}
+                      onChange={(e) => setCustomSetup(e.target.value)}
+                      className={`${styles.input} mt-3`}
+                    />
+                  )}
                 </div>
 
                 <div>
-                  <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                  <label
+                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                  >
                     Notes
                   </label>
                   <textarea
@@ -646,8 +999,44 @@ const expectancy = useMemo(() => {
                   />
                 </div>
 
+                                      <div>
+                  <label
+                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                  >
+                    Screenshot
+                  </label>
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setScreenshotFile(e.target.files?.[0] || null)
+                    }
+                    className={styles.input}
+                  />
+
+                  {(screenshotFile || existingScreenshotUrl) && (
+                    <div className="mt-3">
+                      <p className={`mb-2 text-xs ${styles.muted}`}>
+                        Preview
+                      </p>
+                      <img
+                        src={
+                          screenshotFile
+                            ? URL.createObjectURL(screenshotFile)
+                            : existingScreenshotUrl
+                        }
+                        alt="Trade screenshot preview"
+                        className="max-h-48 rounded-2xl border border-white/10 object-cover"
+                      />
+                    </div>
+                  )}
+                </div>
+
                 <div>
-                  <label className={`mb-3 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                  <label
+                    className={`mb-3 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                  >
                     Mistake Tags
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -656,7 +1045,11 @@ const expectancy = useMemo(() => {
                         key={mistake}
                         type="button"
                         onClick={() => toggleMistake(mistake)}
-                        className={mistakes.includes(mistake) ? styles.pillActive : styles.pill}
+                        className={
+                          mistakes.includes(mistake)
+                            ? styles.pillActive
+                            : styles.pill
+                        }
                       >
                         {mistake}
                       </button>
@@ -671,7 +1064,9 @@ const expectancy = useMemo(() => {
                       : "rounded-3xl border border-black/10 bg-[#f8fafc] p-5"
                   }
                 >
-                  <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                  >
                     Live P&amp;L
                   </p>
                   <p
@@ -705,103 +1100,26 @@ const expectancy = useMemo(() => {
               </div>
             </div>
 
-           <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-2">
-  <div className={`${styles.card} p-5`}>
-    <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
-      Total P&amp;L
-    </p>
-    <p
-      className={`mt-3 text-2xl font-semibold tracking-tight ${
-        totalPnL >= 0 ? styles.positive : styles.negative
-      }`}
-    >
-      {totalPnL >= 0 ? "+" : ""}${totalPnL.toFixed(2)}
-    </p>
-  </div>
-
-  <div className={`${styles.card} p-5`}>
-    <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
-      Win Rate
-    </p>
-    <p className="mt-3 text-2xl font-semibold tracking-tight">
-      {winRate.toFixed(1)}%
-    </p>
-  </div>
-
-  <div className={`${styles.card} p-5`}>
-    <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
-      Average P&amp;L
-    </p>
-    <p
-      className={`mt-3 text-2xl font-semibold tracking-tight ${
-        averagePnL >= 0 ? styles.positive : styles.negative
-      }`}
-    >
-      {averagePnL >= 0 ? "+" : ""}${averagePnL.toFixed(2)}
-    </p>
-  </div>
-
-  <div className={`${styles.card} p-5`}>
-    <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
-      Average Win
-    </p>
-    <p className={`mt-3 text-2xl font-semibold tracking-tight ${styles.positive}`}>
-      +${averageWin.toFixed(2)}
-    </p>
-  </div>
-
-  <div className={`${styles.card} p-5`}>
-    <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
-      Average Loss
-    </p>
-    <p className={`mt-3 text-2xl font-semibold tracking-tight ${styles.negative}`}>
-      ${averageLoss.toFixed(2)}
-    </p>
-  </div>
-
-  <div className={`${styles.card} p-5`}>
-    <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
-      Largest Win
-    </p>
-    <p className={`mt-3 text-2xl font-semibold tracking-tight ${styles.positive}`}>
-      +${largestWin.toFixed(2)}
-    </p>
-  </div>
-
-  <div className={`${styles.card} p-5`}>
-    <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
-      Largest Loss
-    </p>
-    <p className={`mt-3 text-2xl font-semibold tracking-tight ${styles.negative}`}>
-      ${largestLoss.toFixed(2)}
-    </p>
-  </div>
-
-  <div className={`${styles.card} p-5`}>
-    <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
-      Expectancy
-    </p>
-    <p
-      className={`mt-3 text-2xl font-semibold tracking-tight ${
-        expectancy >= 0 ? styles.positive : styles.negative
-      }`}
-    >
-      {expectancy >= 0 ? "+" : ""}${expectancy.toFixed(2)}
-    </p>
-  </div>
-
-  <div className={`${styles.card} p-5`}>
-    <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
-      Max Drawdown
-    </p>
-    <p className={`mt-3 text-2xl font-semibold tracking-tight ${styles.negative}`}>
-      -${maxDrawdown.toFixed(2)}
-    </p>
-  </div>
-</div>
+            <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-2">
+              <div className={`${styles.card} p-5`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                >
+                  Total P&amp;L
+                </p>
+                <p
+                  className={`mt-3 text-2xl font-semibold tracking-tight ${
+                    totalPnL >= 0 ? styles.positive : styles.negative
+                  }`}
+                >
+                  {totalPnL >= 0 ? "+" : ""}${totalPnL.toFixed(2)}
+                </p>
+              </div>
 
               <div className={`${styles.card} p-5`}>
-                <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                >
                   Win Rate
                 </p>
                 <p className="mt-3 text-2xl font-semibold tracking-tight">
@@ -810,7 +1128,9 @@ const expectancy = useMemo(() => {
               </div>
 
               <div className={`${styles.card} p-5`}>
-                <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                >
                   Average P&amp;L
                 </p>
                 <p
@@ -821,10 +1141,370 @@ const expectancy = useMemo(() => {
                   {averagePnL >= 0 ? "+" : ""}${averagePnL.toFixed(2)}
                 </p>
               </div>
+
+              <div className={`${styles.card} p-5`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                >
+                  Average Win
+                </p>
+                <p
+                  className={`mt-3 text-2xl font-semibold tracking-tight ${styles.positive}`}
+                >
+                  +${averageWin.toFixed(2)}
+                </p>
+              </div>
+
+              <div className={`${styles.card} p-5`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                >
+                  Average Loss
+                </p>
+                <p
+                  className={`mt-3 text-2xl font-semibold tracking-tight ${styles.negative}`}
+                >
+                  ${averageLoss.toFixed(2)}
+                </p>
+              </div>
+
+              <div className={`${styles.card} p-5`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                >
+                  Largest Win
+                </p>
+                <p
+                  className={`mt-3 text-2xl font-semibold tracking-tight ${styles.positive}`}
+                >
+                  +${largestWin.toFixed(2)}
+                </p>
+              </div>
+
+              <div className={`${styles.card} p-5`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                >
+                  Largest Loss
+                </p>
+                <p
+                  className={`mt-3 text-2xl font-semibold tracking-tight ${styles.negative}`}
+                >
+                  ${largestLoss.toFixed(2)}
+                </p>
+              </div>
+
+              <div className={`${styles.card} p-5`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                >
+                  Profit Factor
+                </p>
+                <p
+                  className={`mt-3 text-2xl font-semibold tracking-tight ${
+                    profitFactor >= 1 ? styles.positive : styles.negative
+                  }`}
+                >
+                  {profitFactor === Infinity ? "∞" : profitFactor.toFixed(2)}
+                </p>
+              </div>
+
+              <div className={`${styles.card} p-5`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                >
+                  Expectancy
+                </p>
+                <p
+                  className={`mt-3 text-2xl font-semibold tracking-tight ${
+                    expectancy >= 0 ? styles.positive : styles.negative
+                  }`}
+                >
+                  {expectancy >= 0 ? "+" : ""}${expectancy.toFixed(2)}
+                </p>
+              </div>
+
+              <div className={`${styles.card} p-5`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                >
+                  Max Drawdown
+                </p>
+                <p
+                  className={`mt-3 text-2xl font-semibold tracking-tight ${styles.negative}`}
+                >
+                  -${maxDrawdown.toFixed(2)}
+                </p>
+              </div>
             </div>
           </div>
 
           <div className="space-y-6">
+            <div className={`${styles.card} overflow-hidden`}>
+              <div
+                className={
+                  theme === "dark"
+                    ? "border-b border-white/10 px-6 py-5"
+                    : "border-b border-black/10 px-6 py-5"
+                }
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold tracking-tight">
+                      Setup Analytics
+                    </h2>
+                    <p className={`mt-1 text-sm ${styles.muted}`}>
+                      Click a setup row to filter your journal by that setup.
+                    </p>
+                  </div>
+
+                  {setupFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setSetupFilter("")}
+                      className={styles.buttonSecondary}
+                    >
+                      Clear Setup Filter
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {setupAnalytics.length === 0 ? (
+                <div className="flex min-h-[200px] items-center justify-center px-6 py-10">
+                  <p className={styles.muted}>No setup data yet</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px] text-left">
+                    <thead>
+                      <tr className={theme === "dark" ? "bg-[#0f172a]" : "bg-[#f8fafc]"}>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Setup
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Trades
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Win Rate
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Total P&amp;L
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Avg P&amp;L
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Avg Win
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Avg Loss
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {setupAnalytics.map((s) => {
+                        const isActive =
+                          (s.setupName === "No Setup" &&
+                            setupFilter === "No Setup") ||
+                          s.setupName.toLowerCase() ===
+                            setupFilter.toLowerCase();
+
+                        return (
+                          <tr
+                            key={s.setupName}
+                            className={`${styles.row} cursor-pointer transition ${
+                              isActive
+                                ? theme === "dark"
+                                  ? "bg-[#2962ff]/10"
+                                  : "bg-[#2962ff]/8"
+                                : ""
+                            }`}
+                            onClick={() =>
+                              setSetupFilter(
+                                s.setupName === "No Setup"
+                                  ? "No Setup"
+                                  : s.setupName
+                              )
+                            }
+                          >
+                            <td className="px-6 py-4 font-semibold">
+                              {s.setupName}
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              {s.totalTrades}
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              {s.winRate.toFixed(1)}%
+                            </td>
+                            <td
+                              className={`px-6 py-4 text-sm font-semibold ${
+                                s.totalPnL >= 0
+                                  ? styles.positive
+                                  : styles.negative
+                              }`}
+                            >
+                              {s.totalPnL >= 0 ? "+" : ""}$
+                              {s.totalPnL.toFixed(2)}
+                            </td>
+                            <td
+                              className={`px-6 py-4 text-sm font-semibold ${
+                                s.averagePnL >= 0
+                                  ? styles.positive
+                                  : styles.negative
+                              }`}
+                            >
+                              {s.averagePnL >= 0 ? "+" : ""}$
+                              {s.averagePnL.toFixed(2)}
+                            </td>
+                            <td
+                              className={`px-6 py-4 text-sm font-semibold ${styles.positive}`}
+                            >
+                              +${s.averageWin.toFixed(2)}
+                            </td>
+                            <td
+                              className={`px-6 py-4 text-sm font-semibold ${styles.negative}`}
+                            >
+                              ${s.averageLoss.toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+                          <div className={`${styles.card} overflow-hidden`}>
+              <div
+                className={
+                  theme === "dark"
+                    ? "border-b border-white/10 px-6 py-5"
+                    : "border-b border-black/10 px-6 py-5"
+                }
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold tracking-tight">
+                      Mistake Analytics
+                    </h2>
+                    <p className={`mt-1 text-sm ${styles.muted}`}>
+                      Click a mistake row to filter trades by that mistake.
+                    </p>
+                  </div>
+
+                  {mistakeFilter !== "All" && (
+                    <button
+                      type="button"
+                      onClick={() => setMistakeFilter("All")}
+                      className={styles.buttonSecondary}
+                    >
+                      Clear Mistake Filter
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {mistakeAnalytics.length === 0 ? (
+                <div className="flex min-h-[200px] items-center justify-center px-6 py-10">
+                  <p className={styles.muted}>No mistake data yet</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left">
+                    <thead>
+                      <tr className={theme === "dark" ? "bg-[#0f172a]" : "bg-[#f8fafc]"}>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Mistake
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Trades
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Win Rate
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Total P&amp;L
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Avg P&amp;L
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+
+                      {mistakeAnalytics.map((m) => {
+                        const isActive = mistakeFilter === m.mistakeName;
+
+                        return (
+                          <tr
+                            key={m.mistakeName}
+                            className={`${styles.row} cursor-pointer transition ${
+                              isActive
+                                ? theme === "dark"
+                                  ? "bg-[#ff4d4f]/10"
+                                  : "bg-[#ff4d4f]/8"
+                                : ""
+                            }`}
+                            onClick={() => setMistakeFilter(m.mistakeName)}
+                          >
+                            <td className="px-6 py-4 font-semibold">
+                              {m.mistakeName}
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              {m.totalTrades}
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              {m.winRate.toFixed(1)}%
+                            </td>
+                            <td
+                              className={`px-6 py-4 text-sm font-semibold ${
+                                m.totalPnL >= 0 ? styles.positive : styles.negative
+                              }`}
+                            >
+                              {m.totalPnL >= 0 ? "+" : ""}${m.totalPnL.toFixed(2)}
+                            </td>
+                            <td
+                              className={`px-6 py-4 text-sm font-semibold ${
+                                m.averagePnL >= 0 ? styles.positive : styles.negative
+                              }`}
+                            >
+                              {m.averagePnL >= 0 ? "+" : ""}${m.averagePnL.toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
             <div className={`${styles.card} overflow-hidden`}>
               <div
                 className={
@@ -835,9 +1515,12 @@ const expectancy = useMemo(() => {
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <h2 className="text-xl font-semibold tracking-tight">Trade History</h2>
+                    <h2 className="text-xl font-semibold tracking-tight">
+                      Trade History
+                    </h2>
                     <p className={`mt-1 text-sm ${styles.muted}`}>
-                      Review each execution first, then judge the performance curve.
+                      Review each execution first, then judge the performance
+                      curve.
                     </p>
                   </div>
 
@@ -849,10 +1532,20 @@ const expectancy = useMemo(() => {
                           : "rounded-2xl border border-black/10 bg-[#f8fafc] px-4 py-2 text-sm text-[#6b7280]"
                       }
                     >
-                      {filteredTrades.length} shown / {trades.length} total
+                      {sortedTrades.length} shown / {trades.length} total
                     </div>
 
-                    <button onClick={clearAllTrades} className={styles.buttonDanger}>
+                    <button
+                      onClick={exportToCSV}
+                      className={styles.buttonSecondary}
+                    >
+                      Export CSV
+                    </button>
+
+                    <button
+                      onClick={clearAllTrades}
+                      className={styles.buttonDanger}
+                    >
                       Clear All Trades
                     </button>
                   </div>
@@ -886,10 +1579,12 @@ const expectancy = useMemo(() => {
                 </div>
               </div>
 
-              {filteredTrades.length === 0 ? (
+              {sortedTrades.length === 0 ? (
                 <div className="flex min-h-[420px] items-center justify-center px-6 py-10">
                   <div className="text-center">
-                    <p className="text-xl font-semibold tracking-tight">No matching trades</p>
+                    <p className="text-xl font-semibold tracking-tight">
+                      No matching trades
+                    </p>
                     <p className={`mt-2 text-sm ${styles.muted}`}>
                       Adjust your filters or add a new trade.
                     </p>
@@ -900,23 +1595,124 @@ const expectancy = useMemo(() => {
                   <table className="w-full min-w-[1180px] text-left">
                     <thead>
                       <tr className={theme === "dark" ? "bg-[#0f172a]" : "bg-[#f8fafc]"}>
-                        <th className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}>Date</th>
-                        <th className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}>Ticker</th>
-                        <th className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}>Side</th>
-                        <th className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}>Entry</th>
-                        <th className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}>Exit</th>
-                        <th className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}>Shares</th>
-                        <th className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}>Setup</th>
-                        <th className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}>Mistakes</th>
-                        <th className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}>Notes</th>
-                        <th className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}>P&amp;L</th>
-                        <th className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}>Action</th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSort("date")}
+                            className="flex items-center gap-2"
+                          >
+                            Date <span>{getSortIndicator("date")}</span>
+                          </button>
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSort("ticker")}
+                            className="flex items-center gap-2"
+                          >
+                            Ticker <span>{getSortIndicator("ticker")}</span>
+                          </button>
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSort("side")}
+                            className="flex items-center gap-2"
+                          >
+                            Side <span>{getSortIndicator("side")}</span>
+                          </button>
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSort("entry")}
+                            className="flex items-center gap-2"
+                          >
+                            Entry <span>{getSortIndicator("entry")}</span>
+                          </button>
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSort("exit")}
+                            className="flex items-center gap-2"
+                          >
+                            Exit <span>{getSortIndicator("exit")}</span>
+                          </button>
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSort("shares")}
+                            className="flex items-center gap-2"
+                          >
+                            Shares <span>{getSortIndicator("shares")}</span>
+                          </button>
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSort("setup")}
+                            className="flex items-center gap-2"
+                          >
+                            Setup <span>{getSortIndicator("setup")}</span>
+                          </button>
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Mistakes
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Notes
+                        </th>
+
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Screenshot
+                        </th>
+
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSort("pnl")}
+                            className="flex items-center gap-2"
+                          >
+                            P&amp;L <span>{getSortIndicator("pnl")}</span>
+                          </button>
+                        </th>
+                        <th
+                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
+                        >
+                          Action
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredTrades.map((trade) => (
+                      {sortedTrades.map((trade) => (
                         <tr key={trade.id} className={styles.row}>
-                          <td className="px-6 py-4 text-sm font-medium">{trade.date}</td>
+                          <td className="px-6 py-4 text-sm font-medium">
+                            {trade.date}
+                          </td>
                           <td className="px-6 py-4 text-sm font-semibold tracking-wide">
                             {trade.ticker}
                           </td>
@@ -931,10 +1727,16 @@ const expectancy = useMemo(() => {
                               {trade.side}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-sm">${Number(trade.entry).toFixed(2)}</td>
-                          <td className="px-6 py-4 text-sm">${Number(trade.exit).toFixed(2)}</td>
+                          <td className="px-6 py-4 text-sm">
+                            ${Number(trade.entry).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            ${Number(trade.exit).toFixed(2)}
+                          </td>
                           <td className="px-6 py-4 text-sm">{trade.shares}</td>
-                          <td className="px-6 py-4 text-sm">{trade.setup || "—"}</td>
+                          <td className="px-6 py-4 text-sm">
+                            {trade.setup || "—"}
+                          </td>
                           <td className="px-6 py-4 text-sm">
                             <div className="flex max-w-[220px] flex-wrap gap-2">
                               {trade.mistakes.length > 0 ? (
@@ -956,12 +1758,35 @@ const expectancy = useMemo(() => {
                               {trade.notes || "—"}
                             </div>
                           </td>
+
+                                                        <td className="px-6 py-4 text-sm">
+                            {trade.screenshot_url ? (
+                              <a
+                                href={trade.screenshot_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block"
+                              >
+                                <img
+                                  src={trade.screenshot_url}
+                                  alt="Trade screenshot"
+                                  className="h-16 w-24 rounded-xl border border-white/10 object-cover"
+                                />
+                              </a>
+                            ) : (
+                              <span className={styles.muted}>—</span>
+                            )}
+                          </td>
+
                           <td
                             className={`px-6 py-4 text-sm font-semibold ${
-                              Number(trade.pnl) >= 0 ? styles.positive : styles.negative
+                              Number(trade.pnl) >= 0
+                                ? styles.positive
+                                : styles.negative
                             }`}
                           >
-                            {Number(trade.pnl) >= 0 ? "+" : ""}${Number(trade.pnl).toFixed(2)}
+                            {Number(trade.pnl) >= 0 ? "+" : ""}$
+                            {Number(trade.pnl).toFixed(2)}
                           </td>
                           <td className="px-6 py-4 text-sm">
                             <div className="flex gap-2">
@@ -990,21 +1815,29 @@ const expectancy = useMemo(() => {
             <div className={`${styles.card} p-6`}>
               <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Performance Curve</h2>
+                  <h2 className="text-xl font-semibold tracking-tight">
+                    Performance Curve
+                  </h2>
                   <p className={`mt-1 text-sm ${styles.muted}`}>
-                    Cumulative P&amp;L for the trades currently shown by your filters.
+                    Cumulative P&amp;L for the trades currently shown by your
+                    filters.
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                  >
                     Filtered Equity
                   </p>
                   <p
                     className={`mt-1 text-xl font-semibold ${
-                      filteredTotalPnL >= 0 ? styles.positive : styles.negative
+                      filteredTotalPnL >= 0
+                        ? styles.positive
+                        : styles.negative
                     }`}
                   >
-                    {filteredTotalPnL >= 0 ? "+" : ""}${filteredTotalPnL.toFixed(2)}
+                    {filteredTotalPnL >= 0 ? "+" : ""}$
+                    {filteredTotalPnL.toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -1018,7 +1851,9 @@ const expectancy = useMemo(() => {
                   }
                 >
                   <div>
-                    <p className="text-lg font-semibold">No performance data yet</p>
+                    <p className="text-lg font-semibold">
+                      No performance data yet
+                    </p>
                     <p className={`mt-2 text-sm ${styles.muted}`}>
                       Your chart appears after matching trades are shown.
                     </p>
@@ -1033,8 +1868,12 @@ const expectancy = useMemo(() => {
                   }
                 >
                   <div className="mb-4 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.18em]">
-                    <span className={styles.muted}>Min ${chartStats.min.toFixed(2)}</span>
-                    <span className={styles.muted}>Max ${chartStats.max.toFixed(2)}</span>
+                    <span className={styles.muted}>
+                      Min ${chartStats.min.toFixed(2)}
+                    </span>
+                    <span className={styles.muted}>
+                      Max ${chartStats.max.toFixed(2)}
+                    </span>
                   </div>
 
                   <div className="h-[260px] w-full">
@@ -1094,26 +1933,38 @@ const expectancy = useMemo(() => {
 
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
                     <div>
-                      <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                      <p
+                        className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                      >
                         Trades Shown
                       </p>
-                      <p className="mt-1 text-lg font-semibold">{filteredTrades.length}</p>
+                      <p className="mt-1 text-lg font-semibold">
+                        {filteredTrades.length}
+                      </p>
                     </div>
                     <div>
-                      <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                      <p
+                        className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                      >
                         Best Run
                       </p>
-                      <p className={`mt-1 text-lg font-semibold ${styles.positive}`}>
+                      <p
+                        className={`mt-1 text-lg font-semibold ${styles.positive}`}
+                      >
                         ${chartStats.max.toFixed(2)}
                       </p>
                     </div>
                     <div>
-                      <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}>
+                      <p
+                        className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                      >
                         Worst Drawdown Point
                       </p>
                       <p
                         className={`mt-1 text-lg font-semibold ${
-                          chartStats.min < 0 ? styles.negative : styles.muted
+                          chartStats.min < 0
+                            ? styles.negative
+                            : styles.muted
                         }`}
                       >
                         ${chartStats.min.toFixed(2)}
@@ -1126,6 +1977,6 @@ const expectancy = useMemo(() => {
           </div>
         </div>
       </div>
-    
+    </div>
   );
 }
