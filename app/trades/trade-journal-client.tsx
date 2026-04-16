@@ -1051,8 +1051,8 @@ export default function TradeJournalClient({
     shell: "mx-auto max-w-7xl px-6 py-8 md:px-10",
     topBar:
       theme === "dark"
-        ? "mb-8 flex flex-col gap-4 rounded-3xl border border-white/10 bg-[#111827]/70 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)] backdrop-blur md:flex-row md:items-center md:justify-between"
-        : "mb-8 flex flex-col gap-4 rounded-3xl border border-black/10 bg-white p-6 shadow-[0_20px_80px_rgba(15,23,42,0.08)] md:flex-row md:items-center md:justify-between",
+        ? "mb-6 flex flex-col gap-4 rounded-3xl border border-white/10 bg-[#111827]/55 px-5 py-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)] backdrop-blur md:flex-row md:items-center md:justify-between"
+        : "mb-6 flex flex-col gap-4 rounded-3xl border border-black/10 bg-white px-5 py-5 shadow-[0_16px_42px_rgba(15,23,42,0.06)] md:flex-row md:items-center md:justify-between",
     card:
       theme === "dark"
         ? "rounded-3xl border border-white/10 bg-[#131c31] shadow-[0_20px_80px_rgba(0,0,0,0.30)]"
@@ -1117,44 +1117,56 @@ export default function TradeJournalClient({
               {pageTitle}
             </p>
 
-            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-              Track trades like a professional
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+              {pageTitle}
             </h1>
 
-            <p className={`mt-2 max-w-2xl text-sm md:text-base ${styles.muted}`}>
+            <p className={`mt-2 max-w-2xl text-sm ${styles.muted}`}>
               {pageDescription}
             </p>
 
             {userEmail && (
-              <p className="mt-2 text-sm text-[#94a3b8]">
-                Signed in as {userEmail}
+              <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-[#8ea2c9]">
+                {userEmail}
               </p>
             )}
           </div>
 
           <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
-            <button
-              onClick={() => setTheme("light")}
-              className={`${
-                theme === "light" ? styles.buttonPrimary : styles.buttonSecondary
-              } min-w-[96px]`}
+            <div
+              className={
+                theme === "dark"
+                  ? "flex items-center gap-1 rounded-full border border-white/10 bg-[#0b1220] p-1"
+                  : "flex items-center gap-1 rounded-full border border-black/10 bg-[#f8fafc] p-1"
+              }
             >
-              Light
-            </button>
+              <button
+                onClick={() => setTheme("light")}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  theme === "light"
+                    ? "bg-[#2962ff] text-white"
+                    : styles.muted
+                }`}
+              >
+                Light
+              </button>
 
-            <button
-              onClick={() => setTheme("dark")}
-              className={`${
-                theme === "dark" ? styles.buttonPrimary : styles.buttonSecondary
-              } min-w-[96px]`}
-            >
-              Dark
-            </button>
+              <button
+                onClick={() => setTheme("dark")}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  theme === "dark"
+                    ? "bg-[#2962ff] text-white"
+                    : styles.muted
+                }`}
+              >
+                Dark
+              </button>
+            </div>
 
             <button
               onClick={handleSignOut}
               disabled={signingOut}
-              className={styles.buttonDanger}
+              className={styles.buttonSecondary}
             >
               {signingOut ? "Signing Out..." : "Sign Out"}
             </button>

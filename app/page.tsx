@@ -85,7 +85,7 @@ export default async function Home() {
       <header className="mx-auto flex w-full max-w-[1280px] items-center justify-between px-5 py-5 md:px-8">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#8ea2c9]">
-            Trade Journal
+            TradeEdge
           </p>
           <p className="mt-2 text-sm text-[#94a3b8]">
             Behavior-first journaling for active traders
@@ -307,7 +307,7 @@ export default async function Home() {
                 Get Started
               </p>
               <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white">
-                Build a review process you’ll actually use every week.
+                Build a review process you&apos;ll actually use every week.
               </h2>
               <p className="mt-4 text-sm leading-7 text-[#94a3b8]">
                 Start with the free journal. Upgrade when you want advanced

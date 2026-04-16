@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
 import { getUserSubscription, summarizeSubscription } from "../../lib/billing/subscriptions";
-import { WorkspaceSidebarNav } from "./workspace-sidebar-nav";
+import { WorkspaceTopNav } from "./workspace-top-nav";
 
 export default async function WorkspaceLayout({
   children,
@@ -22,37 +22,37 @@ export default async function WorkspaceLayout({
 
   return (
     <div className="min-h-screen bg-[#08111f] text-[#e5e7eb]">
-      <div className="mx-auto grid min-h-screen max-w-[1600px] gap-6 px-4 py-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-6 lg:py-6">
-        <aside className="rounded-[28px] border border-white/10 bg-[#0f1728] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
-          <div className="border-b border-white/10 pb-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#8ea2c9]">
-              Trade Journal
-            </p>
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-white">
-              Workspace
-            </h1>
-            <p className="mt-3 text-sm leading-6 text-[#94a3b8]">
-              Professional journaling, review, and analytics for active traders.
-            </p>
+      <header className="border-b border-white/10 bg-[#0c1424]/92 backdrop-blur">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 py-4 lg:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#8ea2c9]">
+                  TradeEdge
+                </p>
+                <p className="mt-1 text-sm text-[#94a3b8]">
+                  Performance workspace
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-full border border-white/10 bg-[#111a2c] px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#8ea2c9]">
+                {subscriptionSummary.plan} plan
+              </div>
+              <div className="rounded-full border border-white/10 bg-[#111a2c] px-4 py-2 text-sm text-[#dbe4ff]">
+                {user.email ?? "Signed in"}
+              </div>
+            </div>
           </div>
 
-          <WorkspaceSidebarNav plan={subscriptionSummary.plan} />
+          <WorkspaceTopNav />
+        </div>
+      </header>
 
-          <div className="mt-6 rounded-2xl border border-white/10 bg-[#0b1220] p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8ea2c9]">
-              Account
-            </p>
-            <p className="mt-2 text-sm font-medium text-white">
-              {user.email ?? "Signed in"}
-            </p>
-            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#8ea2c9]">
-              {subscriptionSummary.plan} plan
-            </p>
-          </div>
-        </aside>
-
-        <main>{children}</main>
-      </div>
+      <main className="mx-auto w-full max-w-[1600px] px-4 py-6 lg:px-6">
+        {children}
+      </main>
     </div>
   );
 }
