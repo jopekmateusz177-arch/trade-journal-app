@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { createClient } from "../../lib/supabase/server";
-import TradeJournalClient from "./trade-journal-client";
+import { createClient } from "../supabase/server";
+import { getUserSubscription, summarizeSubscription } from "../billing/subscriptions";
 
-export default async function TradesPage() {
+export async function getTradeWorkspaceData() {
   const supabase = await createClient();
 
   const {
@@ -16,17 +16,18 @@ export default async function TradesPage() {
   const { data: trades, error } = await supabase
     .from("trades")
     .select("*")
+    .eq("user_id", user.id)
     .order("date", { ascending: false });
 
   if (error) {
     console.error("Failed to load trades:", error.message);
   }
 
-  return (
-    <TradeJournalClient
-      userId={user.id}
-      userEmail={user.email ?? ""}
-      initialTrades={trades ?? []}
-    />
-  );
+  const subscription = await getUserSubscription(supabase, user.id);
+
+  return {
+    user,
+    trades: trades ?? [],
+    subscription: summarizeSubscription(subscription),
+  };
 }

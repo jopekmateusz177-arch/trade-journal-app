@@ -1,36 +1,136 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Trade Journal
 
-## Getting Started
+Trade Journal is a full-stack trading journal built with Next.js, Supabase, Stripe, and Vercel.
 
-First, run the development server:
+The product is centered on three ideas:
+
+- fast trade entry
+- behavior-driven review
+- premium analytics that connect directly to profitability
+
+## Current Product Shape
+
+The app includes:
+
+- public landing page
+- email/password auth with Supabase
+- protected workspace
+- trade logging, editing, deleting, filtering, sorting
+- screenshot upload to Supabase Storage
+- review workflow with adherence, confidence, emotion, and lesson learned
+- dashboard, trades, analytics, setups, mistakes, review, pricing, and settings pages
+- Stripe checkout scaffolding
+- Stripe webhook subscription syncing
+- plan-aware gating for premium insight features
+
+## Stack
+
+- Next.js App Router
+- React
+- TypeScript
+- Supabase Auth
+- Supabase Database
+- Supabase Storage
+- Stripe
+- Vercel
+
+## Local Development
+
+1. Install dependencies
+
+```bash
+npm install
+```
+
+2. Copy the environment template
+
+```bash
+cp .env.example .env.local
+```
+
+3. Fill in the required values in `.env.local`
+
+4. Start the dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Required Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+For auth and data:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-## Learn More
+For billing:
 
-To learn more about Next.js, take a look at the following resources:
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_PRO`
+- `STRIPE_PRICE_ELITE`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+For app URLs:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_SITE_URL`
 
-## Deploy on Vercel
+## Supabase Migrations To Apply
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Run these migrations in order:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. `supabase/migrations/20260408_add_trade_review_fields.sql`
+2. `supabase/migrations/20260409_add_subscriptions.sql`
+
+## Stripe Webhook
+
+Point Stripe to:
+
+```text
+https://your-live-domain.com/api/stripe/webhook
+```
+
+Relevant events:
+
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+
+## Launch Checklist
+
+Before going live:
+
+1. Apply both Supabase migrations
+2. Add all required Vercel environment variables
+3. Confirm Stripe price IDs are correct
+4. Set Stripe webhook URL and secret
+5. Test sign up, sign in, trade save, trade edit, screenshot upload, and pricing flow
+6. Deploy the latest code to Vercel
+
+## Main Routes
+
+- `/`
+- `/login`
+- `/dashboard`
+- `/trades`
+- `/analytics`
+- `/review`
+- `/setups`
+- `/mistakes`
+- `/pricing`
+- `/settings`
+
+## Product Direction
+
+Trade Journal is being built as a clean, insight-driven journaling product for traders.
+
+Current priorities:
+
+- extremely fast entry flow
+- stronger trade table clarity
+- visible core stats
+- behavior analytics tied to P&L
+- review and weekly summary workflows
+- clear free vs paid feature boundaries

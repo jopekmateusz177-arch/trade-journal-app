@@ -1,15 +1,11 @@
 "use client";
 
-
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../lib/supabase/client";
-import { useEffect } from "react";
-
-
 
 export default function LoginPage() {
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -22,13 +18,18 @@ export default function LoginPage() {
       setLoading(true);
       setMessage("");
 
+      const redirectOrigin =
+        typeof window !== "undefined"
+          ? window.location.origin
+          : process.env.NEXT_PUBLIC_SITE_URL || "";
+
       const { error } = await supabase.auth.signUp({
-  email,
-  password,
-  options: {
-    emailRedirectTo: "http://localhost:3000/auth/callback",
-  },
-});
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${redirectOrigin}/auth/callback`,
+        },
+      });
 
       if (error) {
         setMessage(error.message);
@@ -57,7 +58,7 @@ async function handleSignIn() {
     }
 
     setMessage("Signed in successfully.");
-    router.push("/trades");
+    router.push("/dashboard");
     router.refresh();
   } finally {
     setLoading(false);
@@ -68,12 +69,12 @@ useEffect(() => {
   const checkUser = async () => {
     const { data } = await supabase.auth.getUser();
     if (data.user) {
-      router.push("/trades");
+      router.push("/dashboard");
     }
   };
 
   checkUser();
-}, []);
+}, [router, supabase]);
 
 
   return (

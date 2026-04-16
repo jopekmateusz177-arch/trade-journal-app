@@ -2,44 +2,46 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { FeatureLockCard } from "../components/feature-lock-card";
+import { hasFeatureAccess } from "../../lib/billing/access";
+import type { SubscriptionPlan } from "../../lib/billing/plans";
 import { createClient } from "../../lib/supabase/client";
-
-type Trade = {
-  id: number;
-  user_id?: string;
-  date: string;
-  ticker: string;
-  side: "Long" | "Short";
-  entry: number;
-  exit: number;
-  shares: number;
-  setup: string;
-  notes: string;
-  mistakes: string[];
-  pnl: number;
-  screenshot_url?: string | null;
-  created_at?: string;
-};
+import { AnalyticsMetricsGrid } from "./components/analytics-metrics-grid";
+import { JournalSectionHeader } from "./components/journal-section-header";
+import { JournalStatCard } from "./components/journal-stat-card";
+import { TradeFormSection } from "./components/trade-form-section";
+import { TradeHistorySection } from "./components/trade-history-section";
+import type { SortField, Trade } from "./types";
 
 type ThemeMode = "light" | "dark";
 
-type SortField =
-  | "date"
-  | "ticker"
-  | "side"
-  | "entry"
-  | "exit"
-  | "shares"
-  | "setup"
-  | "pnl";
+type WorkspaceView =
+  | "workspace"
+  | "dashboard"
+  | "trades"
+  | "analytics"
+  | "setups"
+  | "mistakes"
+  | "review";
 
 type Props = {
   userId: string;
   userEmail: string;
   initialTrades: Trade[];
+  subscriptionPlan: SubscriptionPlan;
+  view?: WorkspaceView;
 };
 
 const THEME_STORAGE_KEY = "trade-journal-theme";
+const SAVED_VIEWS_STORAGE_KEY = "trade-journal-saved-views";
+
+type SavedView = {
+  id: string;
+  name: string;
+  tickerFilter: string;
+  setupFilter: string;
+  mistakeFilter: string;
+};
 
 const mistakeOptions = [
   "FOMO Entry",
@@ -61,6 +63,39 @@ const setupOptions = [
   "Other",
 ];
 
+const workspaceSections = [
+  {
+    id: "overview",
+    label: "Overview",
+    description: "Snapshot and product direction",
+  },
+  {
+    id: "journal",
+    label: "Journal",
+    description: "Log and edit trades",
+  },
+  {
+    id: "analytics",
+    label: "Analytics",
+    description: "Review edge and equity curve",
+  },
+  {
+    id: "setups",
+    label: "Setups",
+    description: "Compare setup performance",
+  },
+  {
+    id: "mistakes",
+    label: "Mistakes",
+    description: "Spot recurring leaks",
+  },
+  {
+    id: "history",
+    label: "History",
+    description: "Search, sort, and export",
+  },
+] as const;
+
 function calculatePnL(
   entry: number,
   exit: number,
@@ -74,6 +109,8 @@ export default function TradeJournalClient({
   userId,
   userEmail,
   initialTrades,
+  subscriptionPlan,
+  view = "workspace",
 }: Props) {
   const supabase = createClient();
   const router = useRouter();
@@ -87,8 +124,13 @@ export default function TradeJournalClient({
   const [entry, setEntry] = useState("");
   const [exit, setExit] = useState("");
   const [shares, setShares] = useState("");
-  const [setup, setSetup] = useState("");
+  const [, setSetup] = useState("");
   const [notes, setNotes] = useState("");
+  const [adherenceScore, setAdherenceScore] = useState("");
+  const [confidenceScore, setConfidenceScore] = useState("");
+  const [emotion, setEmotion] = useState("");
+  const [lessonLearned, setLessonLearned] = useState("");
+  const [reviewCompleted, setReviewCompleted] = useState(false);
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [existingScreenshotUrl, setExistingScreenshotUrl] = useState("");
   const [mistakes, setMistakes] = useState<string[]>([]);
@@ -108,6 +150,7 @@ export default function TradeJournalClient({
   const [statusMessage, setStatusMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -125,6 +168,26 @@ export default function TradeJournalClient({
     localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme, mounted]);
 
+  useEffect(() => {
+    if (!mounted) return;
+
+    const storedViews = localStorage.getItem(SAVED_VIEWS_STORAGE_KEY);
+
+    if (!storedViews) return;
+
+    try {
+      const parsed = JSON.parse(storedViews) as SavedView[];
+      setSavedViews(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setSavedViews([]);
+    }
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem(SAVED_VIEWS_STORAGE_KEY, JSON.stringify(savedViews));
+  }, [savedViews, mounted]);
+
     const resetForm = () => {
     setDate("");
     setTicker("");
@@ -136,6 +199,11 @@ export default function TradeJournalClient({
     setSelectedSetup("");
     setCustomSetup("");
     setNotes("");
+    setAdherenceScore("");
+    setConfidenceScore("");
+    setEmotion("");
+    setLessonLearned("");
+    setReviewCompleted(false);
     setMistakes([]);
     setScreenshotFile(null);
     setExistingScreenshotUrl("");
@@ -153,8 +221,8 @@ export default function TradeJournalClient({
   };
 
   const getSortIndicator = (field: SortField) => {
-    if (sortField !== field) return "↕";
-    return sortDirection === "asc" ? "↑" : "↓";
+    if (sortField !== field) return "+/-";
+    return sortDirection === "asc" ? "^" : "v";
   };
 
   const livePnL = useMemo(() => {
@@ -324,6 +392,138 @@ export default function TradeJournalClient({
     [filteredTrades]
   );
 
+  const filteredWinRate = useMemo(() => {
+    if (!filteredTrades.length) return 0;
+    const wins = filteredTrades.filter((trade) => Number(trade.pnl) > 0).length;
+    return (wins / filteredTrades.length) * 100;
+  }, [filteredTrades]);
+
+  const recentTrades = useMemo(() => sortedTrades.slice(0, 4), [sortedTrades]);
+  const hasAdvancedAnalytics = hasFeatureAccess(subscriptionPlan, "advancedAnalytics");
+  const hasSetupAnalytics = hasFeatureAccess(subscriptionPlan, "setupAnalytics");
+  const hasMistakeAnalytics = hasFeatureAccess(subscriptionPlan, "mistakeAnalytics");
+  const latestTradeTemplate = useMemo(() => trades[0] ?? null, [trades]);
+
+  const reviewCompletion = useMemo(() => {
+    const reviewed = trades.filter((trade) => trade.review_completed).length;
+    const pending = trades.length - reviewed;
+
+    return {
+      reviewed,
+      pending,
+      rate: trades.length ? (reviewed / trades.length) * 100 : 0,
+    };
+  }, [trades]);
+
+  const monthPnL = useMemo(() => {
+    const today = new Date();
+    const currentMonth = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}`;
+
+    return trades
+      .filter((trade) => trade.date.startsWith(currentMonth))
+      .reduce((sum, trade) => sum + Number(trade.pnl), 0);
+  }, [trades]);
+
+  const visibleSections = useMemo(() => {
+    switch (view) {
+      case "dashboard":
+        return {
+          overview: true,
+          journal: false,
+          analytics: true,
+          setups: true,
+          mistakes: true,
+          history: false,
+        };
+      case "trades":
+        return {
+          overview: false,
+          journal: true,
+          analytics: false,
+          setups: false,
+          mistakes: false,
+          history: true,
+        };
+      case "analytics":
+        return {
+          overview: false,
+          journal: false,
+          analytics: true,
+          setups: false,
+          mistakes: false,
+          history: false,
+        };
+      case "setups":
+        return {
+          overview: false,
+          journal: false,
+          analytics: false,
+          setups: true,
+          mistakes: false,
+          history: false,
+        };
+      case "mistakes":
+        return {
+          overview: false,
+          journal: false,
+          analytics: false,
+          setups: false,
+          mistakes: true,
+          history: false,
+        };
+      case "review":
+        return {
+          overview: false,
+          journal: false,
+          analytics: false,
+          setups: false,
+          mistakes: false,
+          history: false,
+        };
+      default:
+        return {
+          overview: true,
+          journal: true,
+          analytics: true,
+          setups: true,
+          mistakes: true,
+          history: true,
+        };
+    }
+  }, [view]);
+
+  const pageTitle =
+    view === "dashboard"
+      ? "Trading Journal Dashboard"
+      : view === "trades"
+      ? "Trades Workspace"
+      : view === "analytics"
+      ? "Analytics Workspace"
+      : view === "setups"
+      ? "Setup Performance"
+      : view === "mistakes"
+      ? "Mistake Review"
+      : view === "review"
+      ? "Review Workspace"
+      : "Trading Journal Dashboard";
+
+  const pageDescription =
+    view === "dashboard"
+      ? "Review the health of the journal, key metrics, and your latest trading activity."
+      : view === "trades"
+      ? "Log trades, update executions, and keep the journal clean and searchable."
+      : view === "analytics"
+      ? "Study performance, expectancy, and equity curve behavior."
+      : view === "setups"
+      ? "See which patterns are paying you and which need tighter rules."
+      : view === "mistakes"
+      ? "Find repeatable execution leaks and psychology mistakes."
+      : view === "review"
+      ? "Inspect trades by day and week, then review execution quality."
+      : "Synced with your account. Your trades are now tied to your login, not just one browser.";
+
   const cumulativePnL = useMemo(() => {
     let runningTotal = 0;
 
@@ -470,6 +670,50 @@ export default function TradeJournalClient({
       .sort((a, b) => a.totalPnL - b.totalPnL);
   }, [trades]);
 
+  const currentFocus = useMemo(() => {
+    if (reviewCompletion.pending > 0) {
+      return {
+        title: "Clear pending reviews",
+        description: `${reviewCompletion.pending} trade${
+          reviewCompletion.pending === 1 ? "" : "s"
+        } still need review.`,
+        href: "/review",
+        cta: "Open Review",
+      };
+    }
+
+    if (hasMistakeAnalytics && mistakeAnalytics[0]) {
+      return {
+        title: `Tighten ${mistakeAnalytics[0].mistakeName}`,
+        description: `This leak has produced ${mistakeAnalytics[0].totalPnL >= 0 ? "+" : ""}$${mistakeAnalytics[0].totalPnL.toFixed(2)} across ${mistakeAnalytics[0].totalTrades} tagged trades.`,
+        href: "/mistakes",
+        cta: "Inspect Mistakes",
+      };
+    }
+
+    if (hasSetupAnalytics && setupAnalytics[0]) {
+      return {
+        title: `Lean into ${setupAnalytics[0].setupName}`,
+        description: `Your best setup has produced ${setupAnalytics[0].totalPnL >= 0 ? "+" : ""}$${setupAnalytics[0].totalPnL.toFixed(2)} so far.`,
+        href: "/setups",
+        cta: "View Setups",
+      };
+    }
+
+    return {
+      title: "Log more trades",
+      description: "The dashboard gets sharper as your trade sample grows.",
+      href: "/trades",
+      cta: "Go to Journal",
+    };
+  }, [
+    hasMistakeAnalytics,
+    hasSetupAnalytics,
+    mistakeAnalytics,
+    reviewCompletion.pending,
+    setupAnalytics,
+  ]);
+
   const toggleMistake = (mistake: string) => {
     setMistakes((prev) =>
       prev.includes(mistake)
@@ -493,6 +737,15 @@ export default function TradeJournalClient({
     setSelectedSetup(isPresetSetup ? tradeSetup : tradeSetup ? "Other" : "");
     setCustomSetup(isPresetSetup ? "" : tradeSetup);
     setNotes(trade.notes || "");
+    setAdherenceScore(
+      trade.adherence_score ? String(trade.adherence_score) : ""
+    );
+    setConfidenceScore(
+      trade.confidence_score ? String(trade.confidence_score) : ""
+    );
+    setEmotion(trade.emotion || "");
+    setLessonLearned(trade.lesson_learned || "");
+    setReviewCompleted(Boolean(trade.review_completed));
     setMistakes(trade.mistakes || []);
     setScreenshotFile(null);
     setExistingScreenshotUrl(trade.screenshot_url || "");
@@ -503,6 +756,8 @@ export default function TradeJournalClient({
     const entryNum = Number(entry);
     const exitNum = Number(exit);
     const sharesNum = Number(shares);
+    const adherenceNum = adherenceScore ? Number(adherenceScore) : null;
+    const confidenceNum = confidenceScore ? Number(confidenceScore) : null;
     const finalSetup =
       selectedSetup === "Other"
         ? customSetup.trim()
@@ -515,6 +770,15 @@ export default function TradeJournalClient({
 
     if ([entryNum, exitNum, sharesNum].some((n) => Number.isNaN(n))) {
       setStatusMessage("Entry, exit, and shares must be valid numbers.");
+      return;
+    }
+
+    if (
+      [adherenceNum, confidenceNum].some(
+        (n) => n !== null && (Number.isNaN(n) || n < 1 || n > 5)
+      )
+    ) {
+      setStatusMessage("Review scores must be between 1 and 5.");
       return;
     }
 
@@ -564,6 +828,11 @@ export default function TradeJournalClient({
         notes,
         mistakes,
         pnl: calculatePnL(entryNum, exitNum, sharesNum, side),
+        adherence_score: adherenceNum,
+        confidence_score: confidenceNum,
+        emotion: emotion || null,
+        lesson_learned: lessonLearned.trim() || null,
+        review_completed: reviewCompleted,
         screenshot_url: screenshotUrl || null,
       };
 
@@ -717,6 +986,63 @@ export default function TradeJournalClient({
     setStatusMessage("CSV exported.");
   };
 
+  const applySavedView = (savedView: SavedView) => {
+    setTickerFilter(savedView.tickerFilter);
+    setSetupFilter(savedView.setupFilter);
+    setMistakeFilter(savedView.mistakeFilter);
+    setStatusMessage(`Applied saved view: ${savedView.name}`);
+  };
+
+  const saveCurrentView = (name: string) => {
+    const nextView: SavedView = {
+      id: `${Date.now()}`,
+      name: name.trim(),
+      tickerFilter,
+      setupFilter,
+      mistakeFilter,
+    };
+
+    setSavedViews((prev) => [nextView, ...prev.filter((item) => item.name !== nextView.name)]);
+    setStatusMessage(`Saved view: ${nextView.name}`);
+  };
+
+  const deleteSavedView = (id: string) => {
+    setSavedViews((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const clearFilters = () => {
+    setTickerFilter("");
+    setSetupFilter("");
+    setMistakeFilter("All");
+    setStatusMessage("Filters cleared.");
+  };
+
+  const loadTradeTemplate = (trade: Trade) => {
+    const tradeSetup = trade.setup || "";
+    const isPresetSetup = setupOptions.includes(tradeSetup);
+
+    setEditingTradeId(null);
+    setDate(new Date().toISOString().slice(0, 10));
+    setTicker(trade.ticker);
+    setSide(trade.side);
+    setEntry("");
+    setExit("");
+    setShares(String(trade.shares));
+    setSetup(tradeSetup);
+    setSelectedSetup(isPresetSetup ? tradeSetup : tradeSetup ? "Other" : "");
+    setCustomSetup(isPresetSetup ? "" : tradeSetup);
+    setNotes("");
+    setAdherenceScore("");
+    setConfidenceScore("");
+    setEmotion("");
+    setLessonLearned("");
+    setReviewCompleted(false);
+    setMistakes([]);
+    setScreenshotFile(null);
+    setExistingScreenshotUrl("");
+    setStatusMessage(`Loaded template from ${trade.ticker}.`);
+  };
+
   const styles = {
     page:
       theme === "dark"
@@ -758,6 +1084,22 @@ export default function TradeJournalClient({
         : "rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-medium text-[#4b5563] transition hover:border-[#2962ff]/30",
     pillActive:
       "rounded-full border border-[#2962ff]/30 bg-[#2962ff]/12 px-3 py-2 text-xs font-semibold text-[#2962ff]",
+    sectionNav:
+      theme === "dark"
+        ? "mb-6 flex flex-wrap gap-3 rounded-3xl border border-white/10 bg-[#111827]/60 p-3 shadow-[0_20px_80px_rgba(0,0,0,0.20)] backdrop-blur"
+        : "mb-6 flex flex-wrap gap-3 rounded-3xl border border-black/10 bg-white/95 p-3 shadow-[0_20px_80px_rgba(15,23,42,0.08)]",
+    sectionButton:
+      theme === "dark"
+        ? "flex min-w-[150px] flex-1 flex-col rounded-2xl border border-transparent bg-[#0b1220] px-4 py-3 text-left text-sm text-[#94a3b8] transition hover:border-white/10 hover:text-white"
+        : "flex min-w-[150px] flex-1 flex-col rounded-2xl border border-transparent bg-[#f8fafc] px-4 py-3 text-left text-sm text-[#6b7280] transition hover:border-black/10 hover:text-[#111827]",
+    sectionLink:
+      theme === "dark"
+        ? "rounded-2xl border border-white/10 bg-[#0b1220] p-4 transition hover:border-[#2962ff]/40"
+        : "rounded-2xl border border-black/10 bg-[#f8fafc] p-4 transition hover:border-[#2962ff]/30",
+    subtlePanel:
+      theme === "dark"
+        ? "rounded-3xl border border-white/10 bg-[#0b1220] p-5"
+        : "rounded-3xl border border-black/10 bg-[#f8fafc] p-5",
     tableHead: theme === "dark" ? "text-[#8ea2c9]" : "text-[#6b7280]",
     row: theme === "dark" ? "border-t border-white/10" : "border-t border-black/10",
     positive: "text-[#00c076]",
@@ -772,7 +1114,7 @@ export default function TradeJournalClient({
             <p
               className={`mb-2 text-xs font-semibold uppercase tracking-[0.28em] ${styles.muted}`}
             >
-              Trading Journal Dashboard
+              {pageTitle}
             </p>
 
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
@@ -780,8 +1122,7 @@ export default function TradeJournalClient({
             </h1>
 
             <p className={`mt-2 max-w-2xl text-sm md:text-base ${styles.muted}`}>
-              Synced with your account. Your trades are now tied to your login,
-              not just one browser.
+              {pageDescription}
             </p>
 
             {userEmail && (
@@ -834,413 +1175,395 @@ export default function TradeJournalClient({
           </div>
         )}
 
-        <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-          <div className="space-y-6">
-            <div className={`${styles.card} p-6 md:p-7`}>
-              <div className="mb-6 flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">
-                    {editingTradeId !== null ? "Edit Trade" : "Add Trade"}
-                  </h2>
-                  <p className={`mt-1 text-sm ${styles.muted}`}>
-                    Log the trade, the setup, and the mistakes you want to stop
-                    repeating.
-                  </p>
-                </div>
-              </div>
+        {view === "workspace" && (
+          <div className={styles.sectionNav}>
+            {workspaceSections.map((section) => (
+              <a
+                key={section.id}
+                href={`#${section.id}`}
+                className={styles.sectionButton}
+              >
+                <span className="text-sm font-semibold tracking-tight">
+                  {section.label}
+                </span>
+                <span className="mt-1 text-xs leading-5 opacity-80">
+                  {section.description}
+                </span>
+              </a>
+            ))}
+          </div>
+        )}
 
-              <div className="space-y-4">
-                <div>
-                  <label
-                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                  >
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className={styles.input}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                  >
-                    Ticker
-                  </label>
-                  <input
-                    placeholder="AAPL"
-                    value={ticker}
-                    onChange={(e) => setTicker(e.target.value)}
-                    className={styles.input}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                  >
-                    Position
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setSide("Long")}
-                      className={
-                        side === "Long"
-                          ? styles.buttonPrimary
-                          : styles.buttonSecondary
-                      }
-                    >
-                      Long
-                    </button>
-                    <button
-                      onClick={() => setSide("Short")}
-                      className={
-                        side === "Short"
-                          ? styles.buttonPrimary
-                          : styles.buttonSecondary
-                      }
-                    >
-                      Short
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label
-                      className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                    >
-                      Entry Price
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="100.00"
-                      value={entry}
-                      onChange={(e) => setEntry(e.target.value)}
-                      className={styles.input}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                    >
-                      Exit Price
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="105.00"
-                      value={exit}
-                      onChange={(e) => setExit(e.target.value)}
-                      className={styles.input}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                  >
-                    Shares
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="10"
-                    value={shares}
-                    onChange={(e) => setShares(e.target.value)}
-                    className={styles.input}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                  >
-                    Setup
-                  </label>
-
-                  <select
-                    value={selectedSetup}
-                    onChange={(e) => setSelectedSetup(e.target.value)}
-                    className={styles.input}
-                  >
-                    <option value="">Select setup</option>
-                    {setupOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-
-                  {selectedSetup === "Other" && (
-                    <input
-                      type="text"
-                      placeholder="Enter custom setup"
-                      value={customSetup}
-                      onChange={(e) => setCustomSetup(e.target.value)}
-                      className={`${styles.input} mt-3`}
-                    />
-                  )}
-                </div>
-
-                <div>
-                  <label
-                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                  >
-                    Notes
-                  </label>
-                  <textarea
-                    placeholder="Why did you take it? What would you do differently?"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className={styles.textarea}
-                  />
-                </div>
-
-                                      <div>
-                  <label
-                    className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                  >
-                    Screenshot
-                  </label>
-
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) =>
-                      setScreenshotFile(e.target.files?.[0] || null)
-                    }
-                    className={styles.input}
-                  />
-
-                  {(screenshotFile || existingScreenshotUrl) && (
-                    <div className="mt-3">
-                      <p className={`mb-2 text-xs ${styles.muted}`}>
-                        Preview
-                      </p>
-                      <img
-                        src={
-                          screenshotFile
-                            ? URL.createObjectURL(screenshotFile)
-                            : existingScreenshotUrl
-                        }
-                        alt="Trade screenshot preview"
-                        className="max-h-48 rounded-2xl border border-white/10 object-cover"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label
-                    className={`mb-3 block text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                  >
-                    Mistake Tags
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {mistakeOptions.map((mistake) => (
-                      <button
-                        key={mistake}
-                        type="button"
-                        onClick={() => toggleMistake(mistake)}
-                        className={
-                          mistakes.includes(mistake)
-                            ? styles.pillActive
-                            : styles.pill
-                        }
-                      >
-                        {mistake}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div
-                  className={
-                    theme === "dark"
-                      ? "rounded-3xl border border-white/10 bg-[#0b1220] p-5"
-                      : "rounded-3xl border border-black/10 bg-[#f8fafc] p-5"
-                  }
-                >
-                  <p
-                    className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                  >
-                    Live P&amp;L
-                  </p>
-                  <p
-                    className={`mt-3 text-3xl font-semibold tracking-tight ${
-                      livePnL >= 0 ? styles.positive : styles.negative
-                    }`}
-                  >
-                    {livePnL >= 0 ? "+" : ""}${livePnL.toFixed(2)}
-                  </p>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <button
-                    onClick={submitTrade}
-                    disabled={saving}
-                    className={`${styles.buttonPrimary} w-full`}
-                  >
-                    {saving
-                      ? "Saving..."
-                      : editingTradeId !== null
-                      ? "Save Changes"
-                      : "Add Trade"}
-                  </button>
-                  <button
-                    onClick={resetForm}
-                    className={`${styles.buttonSecondary} w-full`}
-                  >
-                    {editingTradeId !== null ? "Cancel Edit" : "Clear Form"}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-2">
-              <div className={`${styles.card} p-5`}>
+        {visibleSections.overview && (
+          <section id="overview" className="mb-6 scroll-mt-28 space-y-6">
+          <div className={`${styles.card} p-6 md:p-7`}>
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-3xl">
                 <p
                   className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
                 >
-                  Total P&amp;L
+                  Dashboard Overview
                 </p>
-                <p
-                  className={`mt-3 text-2xl font-semibold tracking-tight ${
-                    totalPnL >= 0 ? styles.positive : styles.negative
-                  }`}
-                >
-                  {totalPnL >= 0 ? "+" : ""}${totalPnL.toFixed(2)}
-                </p>
-              </div>
-
-              <div className={`${styles.card} p-5`}>
-                <p
-                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                >
-                  Win Rate
-                </p>
-                <p className="mt-3 text-2xl font-semibold tracking-tight">
-                  {winRate.toFixed(1)}%
+                <h2 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl">
+                  See performance, review quality, and the next best action fast
+                </h2>
+                <p className={`mt-3 max-w-2xl text-sm leading-7 ${styles.muted}`}>
+                  Start here, understand how you are trading, and move directly
+                  into the workflow that matters most. The dashboard now focuses
+                  on performance, behavior, and what to do next.
                 </p>
               </div>
 
-              <div className={`${styles.card} p-5`}>
-                <p
-                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                >
-                  Average P&amp;L
-                </p>
-                <p
-                  className={`mt-3 text-2xl font-semibold tracking-tight ${
-                    averagePnL >= 0 ? styles.positive : styles.negative
-                  }`}
-                >
-                  {averagePnL >= 0 ? "+" : ""}${averagePnL.toFixed(2)}
-                </p>
-              </div>
-
-              <div className={`${styles.card} p-5`}>
-                <p
-                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                >
-                  Average Win
-                </p>
-                <p
-                  className={`mt-3 text-2xl font-semibold tracking-tight ${styles.positive}`}
-                >
-                  +${averageWin.toFixed(2)}
-                </p>
-              </div>
-
-              <div className={`${styles.card} p-5`}>
-                <p
-                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                >
-                  Average Loss
-                </p>
-                <p
-                  className={`mt-3 text-2xl font-semibold tracking-tight ${styles.negative}`}
-                >
-                  ${averageLoss.toFixed(2)}
-                </p>
-              </div>
-
-              <div className={`${styles.card} p-5`}>
-                <p
-                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                >
-                  Largest Win
-                </p>
-                <p
-                  className={`mt-3 text-2xl font-semibold tracking-tight ${styles.positive}`}
-                >
-                  +${largestWin.toFixed(2)}
-                </p>
-              </div>
-
-              <div className={`${styles.card} p-5`}>
-                <p
-                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                >
-                  Largest Loss
-                </p>
-                <p
-                  className={`mt-3 text-2xl font-semibold tracking-tight ${styles.negative}`}
-                >
-                  ${largestLoss.toFixed(2)}
-                </p>
-              </div>
-
-              <div className={`${styles.card} p-5`}>
-                <p
-                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                >
-                  Profit Factor
-                </p>
-                <p
-                  className={`mt-3 text-2xl font-semibold tracking-tight ${
-                    profitFactor >= 1 ? styles.positive : styles.negative
-                  }`}
-                >
-                  {profitFactor === Infinity ? "∞" : profitFactor.toFixed(2)}
-                </p>
-              </div>
-
-              <div className={`${styles.card} p-5`}>
-                <p
-                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                >
-                  Expectancy
-                </p>
-                <p
-                  className={`mt-3 text-2xl font-semibold tracking-tight ${
-                    expectancy >= 0 ? styles.positive : styles.negative
-                  }`}
-                >
-                  {expectancy >= 0 ? "+" : ""}${expectancy.toFixed(2)}
-                </p>
-              </div>
-
-              <div className={`${styles.card} p-5`}>
-                <p
-                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
-                >
-                  Max Drawdown
-                </p>
-                <p
-                  className={`mt-3 text-2xl font-semibold tracking-tight ${styles.negative}`}
-                >
-                  -${maxDrawdown.toFixed(2)}
-                </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <a href="/trades" className={styles.buttonPrimary}>
+                  Go to Journal
+                </a>
+                <a href="/analytics" className={styles.buttonSecondary}>
+                  Open Analytics
+                </a>
               </div>
             </div>
           </div>
 
-          <div className="space-y-6">
-            <div className={`${styles.card} overflow-hidden`}>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <JournalStatCard
+              label="Total P&L"
+              value={`${totalPnL >= 0 ? "+" : ""}$${totalPnL.toFixed(2)}`}
+              detail={`${trades.length} trades logged`}
+              toneClassName={totalPnL >= 0 ? styles.positive : styles.negative}
+              cardClassName={`${styles.card} p-5`}
+              mutedClassName={styles.muted}
+              valueClassName="text-3xl md:text-4xl"
+            />
+
+            <JournalStatCard
+              label="Win Rate"
+              value={`${winRate.toFixed(1)}%`}
+              detail={`This month ${monthPnL >= 0 ? "+" : ""}$${monthPnL.toFixed(2)}`}
+              cardClassName={`${styles.card} p-5`}
+              mutedClassName={styles.muted}
+              valueClassName="text-3xl"
+            />
+
+            {hasAdvancedAnalytics ? (
+              <JournalStatCard
+                label="Profit Factor"
+                value={profitFactor === Infinity ? "INF" : profitFactor.toFixed(2)}
+                detail={`Drawdown -$${maxDrawdown.toFixed(2)}`}
+                toneClassName={profitFactor >= 1 ? styles.positive : styles.negative}
+                cardClassName={`${styles.card} p-5`}
+                mutedClassName={styles.muted}
+                valueClassName="text-3xl"
+              />
+            ) : (
+              <div className={`${styles.card} p-5`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                >
+                  Pro Insight
+                </p>
+                <p className="mt-3 text-2xl font-semibold">Profit Factor</p>
+                <p className={`mt-2 text-sm ${styles.muted}`}>
+                  Upgrade when you want deeper performance context.
+                </p>
+              </div>
+            )}
+
+            <JournalStatCard
+              label="Review Coverage"
+              value={`${reviewCompletion.rate.toFixed(0)}%`}
+              detail={`${reviewCompletion.reviewed} reviewed / ${reviewCompletion.pending} pending`}
+              cardClassName={`${styles.card} p-5`}
+              mutedClassName={styles.muted}
+              valueClassName="text-3xl"
+            />
+
+            <JournalStatCard
+              label="Next Focus"
+              value={reviewCompletion.pending > 0 ? "Review Backlog" : "Stay Consistent"}
+              detail={currentFocus.description}
+              cardClassName={`${styles.card} p-5`}
+              mutedClassName={styles.muted}
+            />
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className={`${styles.card} p-6`}>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-semibold tracking-tight">
+                    Recent Trades
+                  </h3>
+                  <p className={`mt-1 text-sm ${styles.muted}`}>
+                    A quick read on your latest journal activity.
+                  </p>
+                </div>
+                <a href="/trades#history" className={styles.buttonSecondary}>
+                  Full History
+                </a>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {recentTrades.length === 0 ? (
+                  <div className={styles.subtlePanel}>
+                    <p className="text-lg font-semibold">No trades yet</p>
+                    <p className={`mt-2 text-sm ${styles.muted}`}>
+                      Start in the journal section to log your first trade.
+                    </p>
+                  </div>
+                ) : (
+                  recentTrades.map((trade) => (
+                    <a
+                      key={trade.id}
+                      href="/trades#history"
+                      onClick={() => setTickerFilter(trade.ticker)}
+                      className={`${styles.sectionLink} flex items-start justify-between gap-4`}
+                    >
+                      <div>
+                        <p className="text-sm font-semibold tracking-wide">
+                          {trade.ticker} - {trade.side}
+                        </p>
+                        <p className={`mt-1 text-sm ${styles.muted}`}>
+                          {trade.date} - {trade.setup || "No setup"}
+                        </p>
+                      </div>
+                      <p
+                        className={`text-sm font-semibold ${
+                          Number(trade.pnl) >= 0
+                            ? styles.positive
+                            : styles.negative
+                        }`}
+                      >
+                        {Number(trade.pnl) >= 0 ? "+" : ""}$
+                        {Number(trade.pnl).toFixed(2)}
+                      </p>
+                    </a>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className={`${styles.card} p-6`}>
+                <h3 className="text-xl font-semibold tracking-tight">
+                  Today&apos;s Focus
+                </h3>
+                <div className="mt-5 rounded-3xl border border-[#2962ff]/20 bg-[#101a2f] p-5">
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                  >
+                    Best Next Action
+                  </p>
+                  <p className="mt-3 text-xl font-semibold">{currentFocus.title}</p>
+                  <p className={`mt-3 text-sm leading-7 ${styles.muted}`}>
+                    {currentFocus.description}
+                  </p>
+                  <a href={currentFocus.href} className={`${styles.buttonPrimary} mt-5 inline-flex`}>
+                    {currentFocus.cta}
+                  </a>
+                </div>
+              </div>
+
+              <div className={`${styles.card} p-6`}>
+                <h3 className="text-xl font-semibold tracking-tight">
+                  Edge Snapshot
+                </h3>
+                <div className="mt-5 grid gap-3">
+                  <a href="/setups" className={styles.sectionLink}>
+                    <p
+                      className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                    >
+                      Best Setup
+                    </p>
+                    <p className="mt-2 text-lg font-semibold">
+                      {setupAnalytics[0]?.setupName || "No setup data"}
+                    </p>
+                    <p className={`mt-1 text-sm ${styles.muted}`}>
+                      {setupAnalytics[0]
+                        ? `${setupAnalytics[0].totalTrades} trades · ${
+                            setupAnalytics[0].totalPnL >= 0 ? "+" : ""
+                          }$${setupAnalytics[0].totalPnL.toFixed(2)} total`
+                        : "Add more trades to compare setups."}
+                    </p>
+                  </a>
+
+                  <a href="/mistakes" className={styles.sectionLink}>
+                    <p
+                      className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                    >
+                      Biggest Leak
+                    </p>
+                    <p className="mt-2 text-lg font-semibold">
+                      {mistakeAnalytics[0]?.mistakeName || "No mistake data"}
+                    </p>
+                    <p className={`mt-1 text-sm ${styles.muted}`}>
+                      {mistakeAnalytics[0]
+                        ? `${mistakeAnalytics[0].totalTrades} trades · ${
+                            mistakeAnalytics[0].totalPnL >= 0 ? "+" : ""
+                          }$${mistakeAnalytics[0].totalPnL.toFixed(2)} total`
+                        : "Tag mistakes to surface psychology patterns."}
+                    </p>
+                  </a>
+                </div>
+              </div>
+
+              <div className={`${styles.card} p-6`}>
+                <h3 className="text-xl font-semibold tracking-tight">
+                  Account
+                </h3>
+                <div className="mt-5 grid gap-3">
+                  <div className={styles.subtlePanel}>
+                    <p
+                      className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                    >
+                      Signed In
+                    </p>
+                    <p className="mt-2 text-sm font-medium">
+                      {userEmail || "No email available"}
+                    </p>
+                  </div>
+                  <div className={styles.subtlePanel}>
+                    <p
+                      className={`text-xs font-semibold uppercase tracking-[0.18em] ${styles.muted}`}
+                    >
+                      Active Filters
+                    </p>
+                    <p className="mt-2 text-sm font-medium">
+                      {[
+                        tickerFilter,
+                        setupFilter,
+                        mistakeFilter !== "All" ? mistakeFilter : "",
+                      ].filter(Boolean).length || 0}{" "}
+                      applied
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </section>
+        )}
+
+        <div
+          className={`grid gap-6 ${
+            visibleSections.journal && (visibleSections.analytics || visibleSections.setups || visibleSections.mistakes || visibleSections.history)
+              ? "xl:grid-cols-[420px_minmax(0,1fr)]"
+              : "grid-cols-1"
+          }`}
+        >
+          {(visibleSections.journal || visibleSections.analytics) && (
+            <div className="space-y-6">
+            {visibleSections.journal && (
+              <TradeFormSection
+                cardClassName={styles.card}
+                inputClassName={styles.input}
+                textareaClassName={styles.textarea}
+                mutedClassName={styles.muted}
+                buttonPrimaryClassName={styles.buttonPrimary}
+                buttonSecondaryClassName={styles.buttonSecondary}
+                pillClassName={styles.pill}
+                pillActiveClassName={styles.pillActive}
+                positiveClassName={styles.positive}
+                negativeClassName={styles.negative}
+                subtlePanelClassName={
+                  theme === "dark"
+                    ? "rounded-3xl border border-white/10 bg-[#0b1220] p-5"
+                    : "rounded-3xl border border-black/10 bg-[#f8fafc] p-5"
+                }
+                statusMessage={statusMessage}
+                editingTradeId={editingTradeId}
+                date={date}
+                ticker={ticker}
+                side={side}
+                entry={entry}
+                exit={exit}
+                shares={shares}
+                selectedSetup={selectedSetup}
+                customSetup={customSetup}
+                notes={notes}
+                adherenceScore={adherenceScore}
+                confidenceScore={confidenceScore}
+                emotion={emotion}
+                lessonLearned={lessonLearned}
+                reviewCompleted={reviewCompleted}
+                screenshotFile={screenshotFile}
+                existingScreenshotUrl={existingScreenshotUrl}
+                mistakes={mistakes}
+                livePnL={livePnL}
+                latestTradeLabel={latestTradeTemplate?.ticker ?? null}
+                setupOptions={setupOptions}
+                mistakeOptions={mistakeOptions}
+                saving={saving}
+                setDate={setDate}
+                setTicker={setTicker}
+                setSide={setSide}
+                setEntry={setEntry}
+                setExit={setExit}
+                setShares={setShares}
+                setSelectedSetup={setSelectedSetup}
+                setCustomSetup={setCustomSetup}
+                setNotes={setNotes}
+                setAdherenceScore={setAdherenceScore}
+                setConfidenceScore={setConfidenceScore}
+                setEmotion={setEmotion}
+                setLessonLearned={setLessonLearned}
+                setReviewCompleted={setReviewCompleted}
+                setScreenshotFile={setScreenshotFile}
+                toggleMistake={toggleMistake}
+                submitTrade={submitTrade}
+                resetForm={resetForm}
+                useLatestTradeTemplate={() => {
+                  if (latestTradeTemplate) {
+                    loadTradeTemplate(latestTradeTemplate);
+                  }
+                }}
+              />
+            )}
+
+            {visibleSections.analytics && (
+              <section
+                id="analytics"
+                className="grid scroll-mt-28 gap-4 md:grid-cols-3 xl:grid-cols-2"
+              >
+                <AnalyticsMetricsGrid
+                  cardClassName={`${styles.card} p-5`}
+                  mutedClassName={styles.muted}
+                  positiveClassName={styles.positive}
+                  negativeClassName={styles.negative}
+                  totalPnL={totalPnL}
+                  winRate={winRate}
+                  averagePnL={averagePnL}
+                  averageWin={averageWin}
+                  averageLoss={averageLoss}
+                  largestWin={largestWin}
+                  largestLoss={largestLoss}
+                  profitFactor={profitFactor}
+                  expectancy={expectancy}
+                  maxDrawdown={maxDrawdown}
+                  showAdvancedMetrics={hasAdvancedAnalytics}
+                />
+                {!hasAdvancedAnalytics ? (
+                  <div className="md:col-span-3 xl:col-span-2">
+                    <FeatureLockCard
+                      feature="advancedAnalytics"
+                      currentPlan={subscriptionPlan}
+                    />
+                  </div>
+                ) : null}
+              </section>
+            )}
+          </div>
+          )}
+
+          {(visibleSections.setups ||
+            visibleSections.mistakes ||
+            visibleSections.history ||
+            visibleSections.analytics) && (
+            <div className="space-y-6">{visibleSections.setups && (
+              <section
+                id="setups"
+                className={`${styles.card} scroll-mt-28 overflow-hidden`}
+              >
               <div
                 className={
                   theme === "dark"
@@ -1248,29 +1571,32 @@ export default function TradeJournalClient({
                     : "border-b border-black/10 px-6 py-5"
                 }
               >
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold tracking-tight">
-                      Setup Analytics
-                    </h2>
-                    <p className={`mt-1 text-sm ${styles.muted}`}>
-                      Click a setup row to filter your journal by that setup.
-                    </p>
-                  </div>
-
-                  {setupFilter && (
-                    <button
-                      type="button"
-                      onClick={() => setSetupFilter("")}
-                      className={styles.buttonSecondary}
-                    >
-                      Clear Setup Filter
-                    </button>
-                  )}
-                </div>
+                <JournalSectionHeader
+                  title="Setup Analytics"
+                  description="Click a setup row to filter your journal by that setup."
+                  mutedClassName={styles.muted}
+                  actions={
+                    setupFilter ? (
+                      <button
+                        type="button"
+                        onClick={() => setSetupFilter("")}
+                        className={styles.buttonSecondary}
+                      >
+                        Clear Setup Filter
+                      </button>
+                    ) : null
+                  }
+                />
               </div>
 
-              {setupAnalytics.length === 0 ? (
+              {!hasSetupAnalytics ? (
+                <div className="p-6">
+                  <FeatureLockCard
+                    feature="setupAnalytics"
+                    currentPlan={subscriptionPlan}
+                  />
+                </div>
+              ) : setupAnalytics.length === 0 ? (
                 <div className="flex min-h-[200px] items-center justify-center px-6 py-10">
                   <p className={styles.muted}>No setup data yet</p>
                 </div>
@@ -1388,9 +1714,14 @@ export default function TradeJournalClient({
                   </table>
                 </div>
               )}
-            </div>
+              </section>
+            )}
 
-                          <div className={`${styles.card} overflow-hidden`}>
+            {visibleSections.mistakes && (
+              <section
+                id="mistakes"
+                className={`${styles.card} scroll-mt-28 overflow-hidden`}
+              >
               <div
                 className={
                   theme === "dark"
@@ -1398,29 +1729,32 @@ export default function TradeJournalClient({
                     : "border-b border-black/10 px-6 py-5"
                 }
               >
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold tracking-tight">
-                      Mistake Analytics
-                    </h2>
-                    <p className={`mt-1 text-sm ${styles.muted}`}>
-                      Click a mistake row to filter trades by that mistake.
-                    </p>
-                  </div>
-
-                  {mistakeFilter !== "All" && (
-                    <button
-                      type="button"
-                      onClick={() => setMistakeFilter("All")}
-                      className={styles.buttonSecondary}
-                    >
-                      Clear Mistake Filter
-                    </button>
-                  )}
-                </div>
+                <JournalSectionHeader
+                  title="Mistake Analytics"
+                  description="Click a mistake row to filter trades by that mistake."
+                  mutedClassName={styles.muted}
+                  actions={
+                    mistakeFilter !== "All" ? (
+                      <button
+                        type="button"
+                        onClick={() => setMistakeFilter("All")}
+                        className={styles.buttonSecondary}
+                      >
+                        Clear Mistake Filter
+                      </button>
+                    ) : null
+                  }
+                />
               </div>
 
-              {mistakeAnalytics.length === 0 ? (
+              {!hasMistakeAnalytics ? (
+                <div className="p-6">
+                  <FeatureLockCard
+                    feature="mistakeAnalytics"
+                    currentPlan={subscriptionPlan}
+                  />
+                </div>
+              ) : mistakeAnalytics.length === 0 ? (
                 <div className="flex min-h-[200px] items-center justify-center px-6 py-10">
                   <p className={styles.muted}>No mistake data yet</p>
                 </div>
@@ -1503,315 +1837,51 @@ export default function TradeJournalClient({
                   </table>
                 </div>
               )}
-            </div>
+              </section>
+            )}
 
-            <div className={`${styles.card} overflow-hidden`}>
-              <div
-                className={
-                  theme === "dark"
-                    ? "flex flex-col gap-5 border-b border-white/10 px-6 py-5"
-                    : "flex flex-col gap-5 border-b border-black/10 px-6 py-5"
-                }
-              >
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold tracking-tight">
-                      Trade History
-                    </h2>
-                    <p className={`mt-1 text-sm ${styles.muted}`}>
-                      Review each execution first, then judge the performance
-                      curve.
-                    </p>
-                  </div>
+            {visibleSections.history && (
+              <TradeHistorySection
+                cardClassName={styles.card}
+                mutedClassName={styles.muted}
+                inputClassName={styles.input}
+                buttonSecondaryClassName={styles.buttonSecondary}
+                buttonDangerClassName={styles.buttonDanger}
+                rowClassName={styles.row}
+                tableHeadClassName={styles.tableHead}
+                positiveClassName={styles.positive}
+                negativeClassName={styles.negative}
+                theme={theme}
+                trades={trades}
+                sortedTrades={sortedTrades}
+                filteredTotalPnL={filteredTotalPnL}
+                filteredWinRate={filteredWinRate}
+                tickerFilter={tickerFilter}
+                setupFilter={setupFilter}
+                mistakeFilter={mistakeFilter}
+                mistakeOptions={mistakeOptions}
+                savedViews={savedViews}
+                getSortIndicator={getSortIndicator}
+                handleSort={handleSort}
+                setTickerFilter={setTickerFilter}
+                setSetupFilter={setSetupFilter}
+                setMistakeFilter={setMistakeFilter}
+                exportToCSV={exportToCSV}
+                clearAllTrades={clearAllTrades}
+                clearFilters={clearFilters}
+                saveCurrentView={saveCurrentView}
+                applySavedView={(id) => {
+                  const savedView = savedViews.find((item) => item.id === id);
+                  if (savedView) applySavedView(savedView);
+                }}
+                deleteSavedView={deleteSavedView}
+                editTrade={editTrade}
+                duplicateTrade={loadTradeTemplate}
+                deleteTrade={deleteTrade}
+              />
+            )}
 
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={
-                        theme === "dark"
-                          ? "rounded-2xl border border-white/10 bg-[#0b1220] px-4 py-2 text-sm text-[#94a3b8]"
-                          : "rounded-2xl border border-black/10 bg-[#f8fafc] px-4 py-2 text-sm text-[#6b7280]"
-                      }
-                    >
-                      {sortedTrades.length} shown / {trades.length} total
-                    </div>
-
-                    <button
-                      onClick={exportToCSV}
-                      className={styles.buttonSecondary}
-                    >
-                      Export CSV
-                    </button>
-
-                    <button
-                      onClick={clearAllTrades}
-                      className={styles.buttonDanger}
-                    >
-                      Clear All Trades
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 lg:grid-cols-3">
-                  <input
-                    value={tickerFilter}
-                    onChange={(e) => setTickerFilter(e.target.value)}
-                    placeholder="Filter by ticker"
-                    className={styles.input}
-                  />
-                  <input
-                    value={setupFilter}
-                    onChange={(e) => setSetupFilter(e.target.value)}
-                    placeholder="Filter by setup"
-                    className={styles.input}
-                  />
-                  <select
-                    value={mistakeFilter}
-                    onChange={(e) => setMistakeFilter(e.target.value)}
-                    className={styles.input}
-                  >
-                    <option value="All">All mistake tags</option>
-                    {mistakeOptions.map((mistake) => (
-                      <option key={mistake} value={mistake}>
-                        {mistake}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {sortedTrades.length === 0 ? (
-                <div className="flex min-h-[420px] items-center justify-center px-6 py-10">
-                  <div className="text-center">
-                    <p className="text-xl font-semibold tracking-tight">
-                      No matching trades
-                    </p>
-                    <p className={`mt-2 text-sm ${styles.muted}`}>
-                      Adjust your filters or add a new trade.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1180px] text-left">
-                    <thead>
-                      <tr className={theme === "dark" ? "bg-[#0f172a]" : "bg-[#f8fafc]"}>
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleSort("date")}
-                            className="flex items-center gap-2"
-                          >
-                            Date <span>{getSortIndicator("date")}</span>
-                          </button>
-                        </th>
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleSort("ticker")}
-                            className="flex items-center gap-2"
-                          >
-                            Ticker <span>{getSortIndicator("ticker")}</span>
-                          </button>
-                        </th>
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleSort("side")}
-                            className="flex items-center gap-2"
-                          >
-                            Side <span>{getSortIndicator("side")}</span>
-                          </button>
-                        </th>
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleSort("entry")}
-                            className="flex items-center gap-2"
-                          >
-                            Entry <span>{getSortIndicator("entry")}</span>
-                          </button>
-                        </th>
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleSort("exit")}
-                            className="flex items-center gap-2"
-                          >
-                            Exit <span>{getSortIndicator("exit")}</span>
-                          </button>
-                        </th>
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleSort("shares")}
-                            className="flex items-center gap-2"
-                          >
-                            Shares <span>{getSortIndicator("shares")}</span>
-                          </button>
-                        </th>
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleSort("setup")}
-                            className="flex items-center gap-2"
-                          >
-                            Setup <span>{getSortIndicator("setup")}</span>
-                          </button>
-                        </th>
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          Mistakes
-                        </th>
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          Notes
-                        </th>
-
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          Screenshot
-                        </th>
-
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleSort("pnl")}
-                            className="flex items-center gap-2"
-                          >
-                            P&amp;L <span>{getSortIndicator("pnl")}</span>
-                          </button>
-                        </th>
-                        <th
-                          className={`px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] ${styles.tableHead}`}
-                        >
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedTrades.map((trade) => (
-                        <tr key={trade.id} className={styles.row}>
-                          <td className="px-6 py-4 text-sm font-medium">
-                            {trade.date}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-semibold tracking-wide">
-                            {trade.ticker}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <span
-                              className={
-                                trade.side === "Long"
-                                  ? "rounded-full border border-[#00c076]/20 bg-[#00c076]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#00c076]"
-                                  : "rounded-full border border-[#ff4d4f]/20 bg-[#ff4d4f]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#ff4d4f]"
-                              }
-                            >
-                              {trade.side}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            ${Number(trade.entry).toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            ${Number(trade.exit).toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 text-sm">{trade.shares}</td>
-                          <td className="px-6 py-4 text-sm">
-                            {trade.setup || "—"}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <div className="flex max-w-[220px] flex-wrap gap-2">
-                              {trade.mistakes.length > 0 ? (
-                                trade.mistakes.map((mistake) => (
-                                  <span
-                                    key={mistake}
-                                    className="rounded-full border border-[#ffb020]/20 bg-[#ffb020]/10 px-2.5 py-1 text-[11px] font-semibold text-[#ffb020]"
-                                  >
-                                    {mistake}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className={styles.muted}>—</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <div className="max-w-[240px] whitespace-pre-wrap break-words leading-6">
-                              {trade.notes || "—"}
-                            </div>
-                          </td>
-
-                                                        <td className="px-6 py-4 text-sm">
-                            {trade.screenshot_url ? (
-                              <a
-                                href={trade.screenshot_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="block"
-                              >
-                                <img
-                                  src={trade.screenshot_url}
-                                  alt="Trade screenshot"
-                                  className="h-16 w-24 rounded-xl border border-white/10 object-cover"
-                                />
-                              </a>
-                            ) : (
-                              <span className={styles.muted}>—</span>
-                            )}
-                          </td>
-
-                          <td
-                            className={`px-6 py-4 text-sm font-semibold ${
-                              Number(trade.pnl) >= 0
-                                ? styles.positive
-                                : styles.negative
-                            }`}
-                          >
-                            {Number(trade.pnl) >= 0 ? "+" : ""}$
-                            {Number(trade.pnl).toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => editTrade(trade)}
-                                className={styles.buttonSecondary}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => deleteTrade(trade.id)}
-                                className={styles.buttonDanger}
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
+            {visibleSections.analytics && hasAdvancedAnalytics && (
             <div className={`${styles.card} p-6`}>
               <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
                 <div>
@@ -1974,9 +2044,15 @@ export default function TradeJournalClient({
                 </div>
               )}
             </div>
+            )}
           </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
+
+
+
