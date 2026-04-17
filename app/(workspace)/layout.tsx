@@ -23,7 +23,7 @@ export default async function WorkspaceLayout({
 
   return (
     <div className="min-h-screen bg-[#08111f] text-[#e5e7eb]">
-      <header className="border-b border-white/10 bg-[#0c1424]/92 backdrop-blur">
+      <header className="relative z-40 border-b border-white/10 bg-[#0c1424]/92 backdrop-blur">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 py-4 lg:px-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
@@ -52,7 +52,7 @@ export default async function WorkspaceLayout({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1600px] px-4 py-6 lg:px-6">
+      <main className="relative z-0 mx-auto w-full max-w-[1600px] px-4 py-6 lg:px-6">
         {children}
       </main>
     </div>

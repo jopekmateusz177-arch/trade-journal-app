@@ -72,7 +72,7 @@ export function WorkspaceProfileMenu({
   };
 
   return (
-    <div ref={menuRef} className="relative">
+    <div ref={menuRef} className="relative z-50">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
@@ -84,7 +84,7 @@ export function WorkspaceProfileMenu({
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-14 z-30 w-[300px] rounded-3xl border border-white/10 bg-[#0f1728] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.38)]">
+        <div className="absolute right-0 top-14 z-50 w-[300px] rounded-3xl border border-white/10 bg-[#0f1728] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.38)]">
           <div className="rounded-2xl border border-white/10 bg-[#111a2c] p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8ea2c9]">
               TradeEdge
