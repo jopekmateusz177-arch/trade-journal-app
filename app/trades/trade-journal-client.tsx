@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { FeatureLockCard } from "../components/feature-lock-card";
 import { hasFeatureAccess } from "../../lib/billing/access";
 import type { SubscriptionPlan } from "../../lib/billing/plans";
@@ -113,7 +112,6 @@ export default function TradeJournalClient({
   view = "workspace",
 }: Props) {
   const supabase = createClient();
-  const router = useRouter();
 
   const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("dark");
@@ -149,7 +147,6 @@ export default function TradeJournalClient({
 
   const [statusMessage, setStatusMessage] = useState("");
   const [saving, setSaving] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
 
   useEffect(() => {
@@ -913,23 +910,6 @@ export default function TradeJournalClient({
     setStatusMessage("All trades cleared.");
   };
 
-  const handleSignOut = async () => {
-    try {
-      setSigningOut(true);
-      const { error } = await supabase.auth.signOut();
-
-      if (error) {
-        setStatusMessage(error.message);
-        return;
-      }
-
-      router.push("/login");
-      router.refresh();
-    } finally {
-      setSigningOut(false);
-    }
-  };
-
   const exportToCSV = () => {
     if (!sortedTrades.length) {
       setStatusMessage("No trades to export.");
@@ -1125,51 +1105,28 @@ export default function TradeJournalClient({
               {pageDescription}
             </p>
 
-            {userEmail && (
-              <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-[#8ea2c9]">
-                {userEmail}
-              </p>
-            )}
+            {view === "dashboard" ? (
+              <div className="mt-4 rounded-3xl border border-white/10 bg-[linear-gradient(135deg,rgba(41,98,255,0.16),rgba(17,26,44,0.9))] p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8ea2c9]">
+                  TradeEdge
+                </p>
+                <p className="mt-3 max-w-2xl text-lg font-semibold tracking-tight text-white md:text-xl">
+                  Journal with intention. Review with clarity. Improve with evidence.
+                </p>
+              </div>
+            ) : null}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
+          <div className="self-start md:self-auto">
             <div
               className={
                 theme === "dark"
-                  ? "flex items-center gap-1 rounded-full border border-white/10 bg-[#0b1220] p-1"
-                  : "flex items-center gap-1 rounded-full border border-black/10 bg-[#f8fafc] p-1"
+                  ? "rounded-full border border-white/10 bg-[#0b1220] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[#8ea2c9]"
+                  : "rounded-full border border-black/10 bg-[#f8fafc] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[#6b7280]"
               }
             >
-              <button
-                onClick={() => setTheme("light")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  theme === "light"
-                    ? "bg-[#2962ff] text-white"
-                    : styles.muted
-                }`}
-              >
-                Light
-              </button>
-
-              <button
-                onClick={() => setTheme("dark")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  theme === "dark"
-                    ? "bg-[#2962ff] text-white"
-                    : styles.muted
-                }`}
-              >
-                Dark
-              </button>
+              {view === "dashboard" ? "Home" : pageTitle}
             </div>
-
-            <button
-              onClick={handleSignOut}
-              disabled={signingOut}
-              className={styles.buttonSecondary}
-            >
-              {signingOut ? "Signing Out..." : "Sign Out"}
-            </button>
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
 import { getUserSubscription, summarizeSubscription } from "../../lib/billing/subscriptions";
+import { WorkspaceProfileMenu } from "./workspace-profile-menu";
 import { WorkspaceTopNav } from "./workspace-top-nav";
 
 export default async function WorkspaceLayout({
@@ -40,9 +41,10 @@ export default async function WorkspaceLayout({
               <div className="rounded-full border border-white/10 bg-[#111a2c] px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#8ea2c9]">
                 {subscriptionSummary.plan} plan
               </div>
-              <div className="rounded-full border border-white/10 bg-[#111a2c] px-4 py-2 text-sm text-[#dbe4ff]">
-                {user.email ?? "Signed in"}
-              </div>
+              <WorkspaceProfileMenu
+                userEmail={user.email ?? "Signed in"}
+                subscriptionPlan={subscriptionSummary.plan}
+              />
             </div>
           </div>
 
