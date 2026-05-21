@@ -121,6 +121,7 @@ export function TradeFormSection(props: TradeFormSectionProps) {
     statusMessage.toLowerCase().includes("wrong") ||
     statusMessage.toLowerCase().includes("failed") ||
     statusMessage.toLowerCase().includes("error");
+  const fieldLabelClassName = `mb-2 block text-xs font-semibold uppercase tracking-[0.18em] leading-5 ${mutedClassName}`;
 
   return (
     <section id="journal" className={`${cardClassName} scroll-mt-28 p-6 md:p-7`}>
@@ -172,39 +173,65 @@ export function TradeFormSection(props: TradeFormSectionProps) {
           submitTrade();
         }}
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <div>
-            <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Date</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClassName} />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="min-w-0 md:min-w-[180px]">
+            <label className={fieldLabelClassName}>Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inputClassName} w-full min-w-0`} />
           </div>
 
-          <div>
-            <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Ticker</label>
+          <div className="min-w-0 md:min-w-[180px]">
+            <label className={fieldLabelClassName}>Ticker</label>
             <input
               placeholder="AAPL"
               value={ticker}
               onChange={(e) => setTicker(e.target.value.toUpperCase())}
-              className={inputClassName}
+              className={`${inputClassName} w-full min-w-0`}
               autoFocus
             />
           </div>
 
-          <div>
-            <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Position</label>
+          <div className="min-w-0 md:col-span-2 md:min-w-[240px] xl:col-span-1">
+            <label className={fieldLabelClassName}>Position</label>
             <div className="grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => setSide("Long")} className={side === "Long" ? buttonPrimaryClassName : buttonSecondaryClassName}>Long</button>
-              <button type="button" onClick={() => setSide("Short")} className={side === "Short" ? buttonPrimaryClassName : buttonSecondaryClassName}>Short</button>
+              <button
+                type="button"
+                onClick={() => setSide("Long")}
+                className={`${side === "Long" ? buttonPrimaryClassName : buttonSecondaryClassName} min-w-[104px] px-4`}
+              >
+                Long
+              </button>
+              <button
+                type="button"
+                onClick={() => setSide("Short")}
+                className={`${side === "Short" ? buttonPrimaryClassName : buttonSecondaryClassName} min-w-[104px] px-4`}
+              >
+                Short
+              </button>
             </div>
           </div>
+        </div>
 
-          <div>
-            <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Entry Price</label>
-            <input type="number" placeholder="100.00" value={entry} onChange={(e) => setEntry(e.target.value)} className={inputClassName} />
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="min-w-0 md:min-w-[180px]">
+            <label className={fieldLabelClassName}>Entry Price</label>
+            <input
+              type="number"
+              placeholder="100.00"
+              value={entry}
+              onChange={(e) => setEntry(e.target.value)}
+              className={`${inputClassName} w-full min-w-0`}
+            />
           </div>
 
-          <div>
-            <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Exit Price</label>
-            <input type="number" placeholder="105.00" value={exit} onChange={(e) => setExit(e.target.value)} className={inputClassName} />
+          <div className="min-w-0 md:min-w-[180px]">
+            <label className={fieldLabelClassName}>Exit Price</label>
+            <input
+              type="number"
+              placeholder="105.00"
+              value={exit}
+              onChange={(e) => setExit(e.target.value)}
+              className={`${inputClassName} w-full min-w-0`}
+            />
           </div>
         </div>
 
