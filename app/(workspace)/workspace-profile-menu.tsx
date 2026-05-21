@@ -76,7 +76,7 @@ export function WorkspaceProfileMenu({
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-[#111a2c] text-sm font-semibold text-white transition hover:border-[#2962ff]/35 hover:bg-[#14203a]"
+        className="flex h-11 w-11 items-center justify-center rounded-full border border-[#2962ff]/18 bg-[#111a2c] text-sm font-semibold text-white shadow-[0_0_22px_rgba(41,98,255,0.10)] transition hover:border-[#2962ff]/35 hover:bg-[#14203a]"
         aria-expanded={open}
         aria-haspopup="menu"
       >

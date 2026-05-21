@@ -16,7 +16,7 @@ export function WorkspaceTopNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-wrap items-center gap-2">
+    <nav className="flex flex-wrap items-center gap-3 lg:gap-4">
       {primaryNavItems.map((item) => {
         const isActive = pathname === item.href;
 
@@ -24,9 +24,9 @@ export function WorkspaceTopNav() {
           <Link
             key={item.href}
             href={item.href}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+            className={`rounded-full px-5 py-2.5 text-sm font-medium transition ${
               isActive
-                ? "bg-[#2962ff] text-white"
+                ? "bg-[#2962ff] text-white shadow-[0_10px_24px_rgba(41,98,255,0.35),0_0_0_1px_rgba(255,255,255,0.06)_inset]"
                 : "text-[#9fb0d1] hover:bg-white/5 hover:text-white"
             }`}
           >
