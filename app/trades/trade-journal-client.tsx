@@ -520,6 +520,7 @@ export default function TradeJournalClient({
       : view === "review"
       ? "Inspect trades by day and week, then review execution quality."
       : "Synced with your account. Your trades are now tied to your login, not just one browser.";
+  const isTradesPage = view === "trades";
 
   const cumulativePnL = useMemo(() => {
     let runningTotal = 0;
@@ -973,6 +974,11 @@ export default function TradeJournalClient({
     setStatusMessage(`Applied saved view: ${savedView.name}`);
   };
 
+  const applySavedViewById = (id: string) => {
+    const savedView = savedViews.find((item) => item.id === id);
+    if (savedView) applySavedView(savedView);
+  };
+
   const saveCurrentView = (name: string) => {
     const nextView: SavedView = {
       id: `${Date.now()}`,
@@ -1414,11 +1420,19 @@ export default function TradeJournalClient({
         )}
 
         <div
-          className={`grid gap-6 ${
-            visibleSections.journal && (visibleSections.analytics || visibleSections.setups || visibleSections.mistakes || visibleSections.history)
-              ? "xl:grid-cols-[420px_minmax(0,1fr)]"
-              : "grid-cols-1"
-          }`}
+          className={
+            isTradesPage
+              ? "space-y-6"
+              : `grid gap-6 ${
+                  visibleSections.journal &&
+                  (visibleSections.analytics ||
+                    visibleSections.setups ||
+                    visibleSections.mistakes ||
+                    visibleSections.history)
+                    ? "xl:grid-cols-[420px_minmax(0,1fr)]"
+                    : "grid-cols-1"
+                }`
+          }
         >
           {(visibleSections.journal || visibleSections.analytics) && (
             <div className="space-y-6">
@@ -1489,6 +1503,44 @@ export default function TradeJournalClient({
               />
             )}
 
+            {isTradesPage && visibleSections.history && (
+              <TradeHistorySection
+                cardClassName={styles.card}
+                mutedClassName={styles.muted}
+                inputClassName={styles.input}
+                buttonSecondaryClassName={styles.buttonSecondary}
+                buttonDangerClassName={styles.buttonDanger}
+                rowClassName={styles.row}
+                tableHeadClassName={styles.tableHead}
+                positiveClassName={styles.positive}
+                negativeClassName={styles.negative}
+                theme={theme}
+                trades={trades}
+                sortedTrades={sortedTrades}
+                filteredTotalPnL={filteredTotalPnL}
+                filteredWinRate={filteredWinRate}
+                tickerFilter={tickerFilter}
+                setupFilter={setupFilter}
+                mistakeFilter={mistakeFilter}
+                mistakeOptions={mistakeOptions}
+                savedViews={savedViews}
+                getSortIndicator={getSortIndicator}
+                handleSort={handleSort}
+                setTickerFilter={setTickerFilter}
+                setSetupFilter={setSetupFilter}
+                setMistakeFilter={setMistakeFilter}
+                exportToCSV={exportToCSV}
+                clearAllTrades={clearAllTrades}
+                clearFilters={clearFilters}
+                saveCurrentView={saveCurrentView}
+                applySavedView={applySavedViewById}
+                deleteSavedView={deleteSavedView}
+                editTrade={editTrade}
+                duplicateTrade={loadTradeTemplate}
+                deleteTrade={deleteTrade}
+              />
+            )}
+
             {visibleSections.analytics && (
               <section
                 id="analytics"
@@ -1526,7 +1578,7 @@ export default function TradeJournalClient({
 
           {(visibleSections.setups ||
             visibleSections.mistakes ||
-            visibleSections.history ||
+            (!isTradesPage && visibleSections.history) ||
             visibleSections.analytics) && (
             <div className="space-y-6">{visibleSections.setups && (
               <section
@@ -1809,7 +1861,7 @@ export default function TradeJournalClient({
               </section>
             )}
 
-            {visibleSections.history && (
+            {!isTradesPage && visibleSections.history && (
               <TradeHistorySection
                 cardClassName={styles.card}
                 mutedClassName={styles.muted}
@@ -1839,10 +1891,7 @@ export default function TradeJournalClient({
                 clearAllTrades={clearAllTrades}
                 clearFilters={clearFilters}
                 saveCurrentView={saveCurrentView}
-                applySavedView={(id) => {
-                  const savedView = savedViews.find((item) => item.id === id);
-                  if (savedView) applySavedView(savedView);
-                }}
+                applySavedView={applySavedViewById}
                 deleteSavedView={deleteSavedView}
                 editTrade={editTrade}
                 duplicateTrade={loadTradeTemplate}

@@ -124,7 +124,7 @@ export function TradeFormSection(props: TradeFormSectionProps) {
   const fieldLabelClassName = `mb-2 block text-xs font-semibold uppercase tracking-[0.18em] leading-5 ${mutedClassName}`;
 
   return (
-    <section id="journal" className={`${cardClassName} scroll-mt-28 p-6 md:p-7`}>
+    <section id="journal" className={`${cardClassName} scroll-mt-28 p-6`}>
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">
@@ -173,13 +173,13 @@ export function TradeFormSection(props: TradeFormSectionProps) {
           submitTrade();
         }}
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <div className="min-w-0 md:min-w-[180px]">
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="min-w-0">
             <label className={fieldLabelClassName}>Date</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inputClassName} w-full min-w-0`} />
           </div>
 
-          <div className="min-w-0 md:min-w-[180px]">
+          <div className="min-w-0">
             <label className={fieldLabelClassName}>Ticker</label>
             <input
               placeholder="AAPL"
@@ -190,20 +190,20 @@ export function TradeFormSection(props: TradeFormSectionProps) {
             />
           </div>
 
-          <div className="min-w-0 md:col-span-2 md:min-w-[240px] xl:col-span-1">
+          <div className="min-w-0">
             <label className={fieldLabelClassName}>Position</label>
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setSide("Long")}
-                className={`${side === "Long" ? buttonPrimaryClassName : buttonSecondaryClassName} min-w-[104px] px-4`}
+                className={`${side === "Long" ? buttonPrimaryClassName : buttonSecondaryClassName} min-h-12 min-w-[112px] px-4`}
               >
                 Long
               </button>
               <button
                 type="button"
                 onClick={() => setSide("Short")}
-                className={`${side === "Short" ? buttonPrimaryClassName : buttonSecondaryClassName} min-w-[104px] px-4`}
+                className={`${side === "Short" ? buttonPrimaryClassName : buttonSecondaryClassName} min-h-12 min-w-[112px] px-4`}
               >
                 Short
               </button>
@@ -211,8 +211,8 @@ export function TradeFormSection(props: TradeFormSectionProps) {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="min-w-0 md:min-w-[180px]">
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="min-w-0">
             <label className={fieldLabelClassName}>Entry Price</label>
             <input
               type="number"
@@ -223,7 +223,7 @@ export function TradeFormSection(props: TradeFormSectionProps) {
             />
           </div>
 
-          <div className="min-w-0 md:min-w-[180px]">
+          <div className="min-w-0">
             <label className={fieldLabelClassName}>Exit Price</label>
             <input
               type="number"
@@ -233,17 +233,22 @@ export function TradeFormSection(props: TradeFormSectionProps) {
               className={`${inputClassName} w-full min-w-0`}
             />
           </div>
+
+          <div className="min-w-0">
+            <label className={fieldLabelClassName}>Shares</label>
+            <input
+              type="number"
+              placeholder="10"
+              value={shares}
+              onChange={(e) => setShares(e.target.value)}
+              className={`${inputClassName} w-full min-w-0`}
+            />
+          </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-[0.7fr_1.3fr]">
-          <div>
-            <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Shares</label>
-            <input type="number" placeholder="10" value={shares} onChange={(e) => setShares(e.target.value)} className={inputClassName} />
-          </div>
-
-          <div>
-            <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Setup</label>
-            <select value={selectedSetup} onChange={(e) => setSelectedSetup(e.target.value)} className={inputClassName}>
+        <div className="min-w-0">
+          <label className={fieldLabelClassName}>Setup</label>
+          <select value={selectedSetup} onChange={(e) => setSelectedSetup(e.target.value)} className={`${inputClassName} w-full min-w-0`}>
               <option value="">Select setup</option>
               {setupOptions.map((option) => (
                 <option key={option} value={option}>
@@ -252,14 +257,19 @@ export function TradeFormSection(props: TradeFormSectionProps) {
               ))}
             </select>
 
-            {selectedSetup === "Other" && (
-              <input type="text" placeholder="Enter custom setup" value={customSetup} onChange={(e) => setCustomSetup(e.target.value)} className={`${inputClassName} mt-3`} />
-            )}
-          </div>
+          {selectedSetup === "Other" && (
+            <input
+              type="text"
+              placeholder="Enter custom setup"
+              value={customSetup}
+              onChange={(e) => setCustomSetup(e.target.value)}
+              className={`${inputClassName} mt-3 w-full min-w-0`}
+            />
+          )}
         </div>
 
         <div>
-          <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Notes</label>
+          <label className={fieldLabelClassName}>Notes</label>
           <textarea placeholder="Why did you take it? What would you do differently?" value={notes} onChange={(e) => setNotes(e.target.value)} className={textareaClassName} />
         </div>
 
@@ -281,10 +291,10 @@ export function TradeFormSection(props: TradeFormSectionProps) {
             </label>
           </div>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <div>
-              <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Plan Adherence</label>
-              <select value={adherenceScore} onChange={(e) => setAdherenceScore(e.target.value)} className={inputClassName}>
+              <label className={fieldLabelClassName}>Plan Adherence</label>
+              <select value={adherenceScore} onChange={(e) => setAdherenceScore(e.target.value)} className={`${inputClassName} w-full min-w-0`}>
                 <option value="">Rate 1-5</option>
                 {[1, 2, 3, 4, 5].map((score) => (
                   <option key={score} value={score}>
@@ -294,8 +304,8 @@ export function TradeFormSection(props: TradeFormSectionProps) {
               </select>
             </div>
             <div>
-              <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Confidence</label>
-              <select value={confidenceScore} onChange={(e) => setConfidenceScore(e.target.value)} className={inputClassName}>
+              <label className={fieldLabelClassName}>Confidence</label>
+              <select value={confidenceScore} onChange={(e) => setConfidenceScore(e.target.value)} className={`${inputClassName} w-full min-w-0`}>
                 <option value="">Rate 1-5</option>
                 {[1, 2, 3, 4, 5].map((score) => (
                   <option key={score} value={score}>
@@ -304,11 +314,9 @@ export function TradeFormSection(props: TradeFormSectionProps) {
                 ))}
               </select>
             </div>
-          </div>
-
-          <div className="mt-4">
-            <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Emotion</label>
-            <select value={emotion} onChange={(e) => setEmotion(e.target.value)} className={inputClassName}>
+            <div>
+              <label className={fieldLabelClassName}>Emotion</label>
+              <select value={emotion} onChange={(e) => setEmotion(e.target.value)} className={`${inputClassName} w-full min-w-0`}>
               <option value="">Select emotion</option>
               {["Calm", "Confident", "Neutral", "Hesitant", "FOMO", "Frustrated", "Overconfident"].map((option) => (
                 <option key={option} value={option}>
@@ -316,10 +324,11 @@ export function TradeFormSection(props: TradeFormSectionProps) {
                 </option>
               ))}
             </select>
+            </div>
           </div>
 
           <div className="mt-4">
-            <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Lesson Learned</label>
+            <label className={fieldLabelClassName}>Lesson Learned</label>
             <textarea
               placeholder="What should you repeat or avoid next time?"
               value={lessonLearned}
@@ -327,22 +336,6 @@ export function TradeFormSection(props: TradeFormSectionProps) {
               className={textareaClassName}
             />
           </div>
-        </div>
-
-        <div>
-          <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Screenshot</label>
-          <input type="file" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} className={inputClassName} />
-          {(screenshotFile || existingScreenshotUrl) && (
-            <div className="mt-3">
-              <p className={`mb-2 text-xs ${mutedClassName}`}>Preview</p>
-              <TradeScreenshot
-                src={screenshotFile ? URL.createObjectURL(screenshotFile) : existingScreenshotUrl}
-                alt="Trade screenshot preview"
-                wrapperClassName="relative h-48 w-full max-w-sm overflow-hidden rounded-2xl border border-white/10"
-                className="object-cover"
-              />
-            </div>
-          )}
         </div>
 
         <div>
@@ -361,18 +354,34 @@ export function TradeFormSection(props: TradeFormSectionProps) {
           </div>
         </div>
 
-        <div className={subtlePanelClassName}>
-          <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Live P&amp;L</p>
-          <p className={`mt-3 text-3xl font-semibold tracking-tight ${livePnL >= 0 ? positiveClassName : negativeClassName}`}>
-            {livePnL >= 0 ? "+" : ""}${livePnL.toFixed(2)}
-          </p>
+        <div>
+          <label className={fieldLabelClassName}>Screenshot</label>
+          <input type="file" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} className={`${inputClassName} w-full min-w-0`} />
+          {(screenshotFile || existingScreenshotUrl) && (
+            <div className="mt-3">
+              <p className={`mb-2 text-xs ${mutedClassName}`}>Preview</p>
+              <TradeScreenshot
+                src={screenshotFile ? URL.createObjectURL(screenshotFile) : existingScreenshotUrl}
+                alt="Trade screenshot preview"
+                wrapperClassName="relative h-48 w-full max-w-sm overflow-hidden rounded-2xl border border-white/10"
+                className="object-cover"
+              />
+            </div>
+          )}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-            <button type="submit" disabled={saving} className={`${buttonPrimaryClassName} w-full`}>
-              {saving ? "Saving..." : editingTradeId !== null ? "Save Changes" : "Add Trade"}
-            </button>
-          <button type="button" onClick={resetForm} className={`${buttonSecondaryClassName} w-full`}>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">
+          <div className={`${subtlePanelClassName} h-full`}>
+            <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Live P&amp;L</p>
+            <p className={`mt-3 text-3xl font-semibold tracking-tight ${livePnL >= 0 ? positiveClassName : negativeClassName}`}>
+              {livePnL >= 0 ? "+" : ""}${livePnL.toFixed(2)}
+            </p>
+          </div>
+
+          <button type="submit" disabled={saving} className={`${buttonPrimaryClassName} w-full lg:min-w-[180px]`}>
+            {saving ? "Saving..." : editingTradeId !== null ? "Save Changes" : "Add Trade"}
+          </button>
+          <button type="button" onClick={resetForm} className={`${buttonSecondaryClassName} w-full lg:min-w-[180px]`}>
             {editingTradeId !== null ? "Cancel Edit" : "Clear Form"}
           </button>
         </div>
