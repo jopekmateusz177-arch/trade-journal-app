@@ -370,10 +370,10 @@ export function TradeFormSection(props: TradeFormSectionProps) {
           )}
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">
-          <div className={`${subtlePanelClassName} h-full`}>
+        <div className="grid gap-4 lg:grid-cols-[auto_auto_auto] lg:items-end lg:justify-start">
+          <div className={`${subtlePanelClassName} w-full lg:w-auto lg:min-w-[170px] lg:px-4 lg:py-3`}>
             <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${mutedClassName}`}>Live P&amp;L</p>
-            <p className={`mt-3 text-3xl font-semibold tracking-tight ${livePnL >= 0 ? positiveClassName : negativeClassName}`}>
+            <p className={`mt-2 text-2xl font-semibold tracking-tight ${livePnL >= 0 ? positiveClassName : negativeClassName}`}>
               {livePnL >= 0 ? "+" : ""}${livePnL.toFixed(2)}
             </p>
           </div>

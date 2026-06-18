@@ -1097,11 +1097,13 @@ export default function TradeJournalClient({
       <div className={styles.shell}>
         <div className={styles.topBar}>
           <div>
-            <p
-              className={`mb-2 text-xs font-semibold uppercase tracking-[0.28em] ${styles.muted}`}
-            >
-              {pageTitle}
-            </p>
+            {view !== "trades" ? (
+              <p
+                className={`mb-2 text-xs font-semibold uppercase tracking-[0.28em] ${styles.muted}`}
+              >
+                {pageTitle}
+              </p>
+            ) : null}
 
             <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
               {pageTitle}
@@ -1123,17 +1125,19 @@ export default function TradeJournalClient({
             ) : null}
           </div>
 
-          <div className="self-start md:self-auto">
-            <div
-              className={
-                theme === "dark"
-                  ? "rounded-full border border-white/10 bg-[#0b1220] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[#8ea2c9]"
-                  : "rounded-full border border-black/10 bg-[#f8fafc] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[#6b7280]"
-              }
-            >
-              {view === "dashboard" ? "Home" : pageTitle}
+          {view !== "trades" ? (
+            <div className="self-start md:self-auto">
+              <div
+                className={
+                  theme === "dark"
+                    ? "rounded-full border border-white/10 bg-[#0b1220] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[#8ea2c9]"
+                    : "rounded-full border border-black/10 bg-[#f8fafc] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[#6b7280]"
+                }
+              >
+                {view === "dashboard" ? "Home" : pageTitle}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
 
         {statusMessage && (
